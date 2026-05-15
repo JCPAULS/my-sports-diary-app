@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { getAllGames, deleteGame } from '@/lib/storage'
 import { getWeekLabel } from '@/lib/nflTeams'
 import Nav from '@/components/Nav'
@@ -65,7 +65,7 @@ export default function GameDetail() {
   }
 
   const hasScore = game.homeScore !== undefined && game.awayScore !== undefined
-  const hasLittleThings = !!(game.whatYouWore || game.whatYouAte || game.whoDrove || game.pregameRitual)
+  const hasLittleThings = !!(game.whatYouWore || game.whatYouAte || game.whoDrove || game.pregameRitual || game.outfitPhoto)
   const hasRightContent = !!(game.photos?.length || game.notes || game.vibe || game.mvp || game.whoWasThere || hasLittleThings || game.summary)
 
   function handleDelete() {
@@ -98,13 +98,19 @@ export default function GameDetail() {
       )}
 
       <header className="bg-hero-blue border-b-4 border-ink">
-        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 flex items-center justify-between">
           <button
             onClick={() => navigate(-1)}
             className="font-bebas text-xl tracking-wider text-ink hover:text-red transition-colors"
           >
             ← Back
           </button>
+          <Link
+            to={`/game/${game.id}/edit`}
+            className="font-bebas text-xl tracking-wider text-ink hover:text-red transition-colors"
+          >
+            EDIT
+          </Link>
         </div>
       </header>
 
@@ -247,7 +253,31 @@ export default function GameDetail() {
               <div className="py-3 border-b-2 border-ink/10">
                 <p className="font-bebas text-xs tracking-[0.2em] text-ink/40 mb-3">THE LITTLE THINGS</p>
                 <div className="flex flex-col gap-2">
-                  <LittleThingRow label="WHAT WE WORE" value={game.whatYouWore} />
+                  {/* What We Wore + outfit photo */}
+                  {(game.whatYouWore || game.outfitPhoto) && (
+                    <div className="leading-snug flex items-start gap-3">
+                      <div className="flex-1">
+                        {game.whatYouWore && (
+                          <>
+                            <span className="font-bebas text-xs tracking-[0.15em] text-ink/40">WHAT WE WORE — </span>
+                            <span className="font-caveat text-lg text-navy">{game.whatYouWore}</span>
+                          </>
+                        )}
+                        {!game.whatYouWore && game.outfitPhoto && (
+                          <span className="font-bebas text-xs tracking-[0.15em] text-ink/40">WHAT WE WORE</span>
+                        )}
+                      </div>
+                      {game.outfitPhoto && (
+                        <button
+                          type="button"
+                          onClick={() => setLightboxPhoto(game.outfitPhoto!)}
+                          className="flex-shrink-0 border-2 border-ink p-1 bg-white shadow-[2px_2px_0_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] transition-all"
+                        >
+                          <img src={game.outfitPhoto} alt="Outfit" className="w-20 h-20 object-cover" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <LittleThingRow label="WHAT WE ATE" value={game.whatYouAte} />
                   <LittleThingRow label="WHO DROVE" value={game.whoDrove} />
                   <LittleThingRow label="PREGAME RITUAL" value={game.pregameRitual} />

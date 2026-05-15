@@ -35,12 +35,22 @@ export default function Settings() {
   const selectClass =
     'w-full bg-white border-2 border-ink px-3 py-2.5 font-archivo text-base text-ink focus:outline-none focus:border-red transition-colors cursor-pointer'
 
-  function setFav(sportId: string, teamName: string) {
+  function toggleTeam(sportId: string, teamName: string) {
     setSettings((prev) => {
-      const next = { ...prev, favoriteTeams: { ...prev.favoriteTeams, [sportId]: teamName } }
-      // If this team was the primary, update it to the new name (or clear if removed)
-      if (prev.primaryFavoriteTeam?.sportId === sportId) {
-        next.primaryFavoriteTeam = teamName ? { sportId, teamName } : null
+      const current = prev.followedTeams[sportId] ?? []
+      const isFollowing = current.includes(teamName)
+      const next: AppSettings = {
+        ...prev,
+        followedTeams: { ...prev.followedTeams },
+      }
+      if (isFollowing) {
+        next.followedTeams[sportId] = current.filter((t) => t !== teamName)
+        // Clear primary if this team was it
+        if (prev.primaryFavoriteTeam?.sportId === sportId && prev.primaryFavoriteTeam?.teamName === teamName) {
+          next.primaryFavoriteTeam = null
+        }
+      } else {
+        next.followedTeams[sportId] = [...current, teamName]
       }
       return next
     })
@@ -60,20 +70,19 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 1500)
   }
 
-  // Sports with static team data (can set a favorite)
+  // Sports with static team data (can follow teams)
   const sportsWithTeams = ENABLED_SPORTS.filter(
     (s) => !s.isCustom && getTeamsBySport(s.id).length > 0
   )
 
-  // Favorites that have been set
-  const setFavorites = Object.entries(settings.favoriteTeams).filter(([, name]) => name)
-
-  // All eligible theme teams across all sports
+  // All eligible theme teams across all followed teams
   const themeOptions: { sportId: string; teamName: string; color: string }[] = []
-  for (const [sid, teamName] of setFavorites) {
-    const team = getTeam(sid, teamName)
-    if (team?.textColor === 'white' && team?.primaryColor) {
-      themeOptions.push({ sportId: sid, teamName, color: team.primaryColor })
+  for (const [sid, teamNames] of Object.entries(settings.followedTeams)) {
+    for (const teamName of teamNames) {
+      const team = getTeam(sid, teamName)
+      if (team?.textColor === 'white' && team?.primaryColor) {
+        themeOptions.push({ sportId: sid, teamName, color: team.primaryColor })
+      }
     }
   }
 
@@ -96,29 +105,47 @@ export default function Settings() {
 
       <main className="max-w-2xl mx-auto px-4 lg:px-8 py-8 flex flex-col gap-10">
 
-        {/* ── FAVORITE TEAMS ── */}
+        {/* ── FOLLOWED TEAMS ── */}
         <div>
-          <SectionHeader title="FAVORITE TEAMS" />
+          <SectionHeader title="FOLLOWED TEAMS" />
           <p className="font-caveat text-base text-ink/50 mb-5">
-            Set your favorite team per sport. Used to auto-fill "who were you rooting for" and highlight your teams in stats.
+            Follow your teams to auto-fill "who were you rooting for" and highlight them in stats.
           </p>
           <div className="flex flex-col gap-4">
             {sportsWithTeams.map((s) => {
-              const options = getTeamsBySport(s.id).map((t) => t.name).sort()
-              const current = settings.favoriteTeams[s.id] ?? ''
+              const followed = settings.followedTeams[s.id] ?? []
+              const available = getTeamsBySport(s.id).map((t) => t.name).sort().filter((n) => !followed.includes(n))
               return (
-                <div key={s.id} className="grid grid-cols-[120px_1fr] items-center gap-4">
-                  <span className="font-bebas text-sm tracking-[0.15em] text-ink">{s.label}</span>
-                  <select
-                    value={current}
-                    onChange={(e) => setFav(s.id, e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="">— none —</option>
-                    {options.map((name) => (
-                      <option key={name} value={name}>{name}</option>
+                <div key={s.id} className="grid grid-cols-[120px_1fr] items-start gap-4">
+                  <span className="font-bebas text-sm tracking-[0.15em] text-ink pt-2">{s.label}</span>
+                  <div className="flex flex-wrap gap-2 min-h-[38px] items-center">
+                    {followed.map((teamName) => (
+                      <span
+                        key={teamName}
+                        className="inline-flex items-center gap-1.5 font-bebas text-xs tracking-[0.08em] bg-paper border-2 border-ink text-ink px-2.5 py-1"
+                      >
+                        {teamName}
+                        <button
+                          type="button"
+                          onClick={() => toggleTeam(s.id, teamName)}
+                          className="text-red hover:text-red-deep font-archivo font-bold text-sm leading-none"
+                          aria-label={`Unfollow ${teamName}`}
+                        >
+                          ×
+                        </button>
+                      </span>
                     ))}
-                  </select>
+                    {available.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) { toggleTeam(s.id, e.target.value) } }}
+                        className="font-bebas text-xs tracking-[0.08em] bg-paper border-2 border-dashed border-ink/40 text-ink/50 px-2.5 py-1 focus:outline-none focus:border-ink hover:border-ink/70 transition-colors cursor-pointer"
+                      >
+                        <option value="">+ Add team</option>
+                        {available.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -155,7 +182,7 @@ export default function Settings() {
             <div className="flex flex-col gap-4 pl-1 border-l-4 border-ink/20">
               {themeOptions.length === 0 ? (
                 <p className="font-caveat text-base text-ink/50">
-                  Set a favorite team above first. Only teams with darker colors are available for theming (so text stays readable).
+                  Follow a team above first. Only teams with darker colors are available for theming (so text stays readable).
                 </p>
               ) : (
                 <>

@@ -46,6 +46,32 @@ class MapErrorBoundary extends Component<
 
 interface TeamStat { team: string; sportId: string; total: number; home: number; away: number }
 
+interface FollowedTeamStat {
+  teamName: string; sportId: string; gamesAttended: number
+  wins: number; losses: number; ties: number
+}
+
+function computeFollowedTeamStats(games: Game[], followedTeams: Record<string, string[]>): FollowedTeamStat[] {
+  const stats: FollowedTeamStat[] = []
+  for (const [sportId, teamNames] of Object.entries(followedTeams)) {
+    for (const teamName of teamNames) {
+      const teamGames = games.filter((g) => g.homeTeam === teamName || g.awayTeam === teamName)
+      let wins = 0, losses = 0, ties = 0
+      for (const g of teamGames) {
+        if (g.homeScore === undefined || g.awayScore === undefined) continue
+        const teamIsHome = g.homeTeam === teamName
+        const teamScore = teamIsHome ? g.homeScore : g.awayScore
+        const oppScore = teamIsHome ? g.awayScore : g.homeScore
+        if (teamScore === oppScore) ties++
+        else if (teamScore > oppScore) wins++
+        else losses++
+      }
+      stats.push({ teamName, sportId, gamesAttended: teamGames.length, wins, losses, ties })
+    }
+  }
+  return stats.sort((a, b) => b.gamesAttended - a.gamesAttended)
+}
+
 function computeTeamStats(games: Game[]): TeamStat[] {
   const map: Record<string, TeamStat> = {}
   const ensure = (name: string, sid: string) => {
@@ -268,8 +294,9 @@ export default function Stats() {
   }
   const uniqueStates = new Set(mapPins.map((p) => p.state)).size
 
-  // Favorite teams
-  const favoriteTeams = getSettings().favoriteTeams
+  // Followed teams
+  const followedTeams = getSettings().followedTeams
+  const followedTeamStats = computeFollowedTeamStats(games, followedTeams)
 
   // Sport breakdown: count games per sport
   const sportBreakdown: { id: string; label: string; count: number }[] = []
@@ -286,12 +313,52 @@ export default function Stats() {
 
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-8">
 
+        {/* ── YOUR TEAMS ── */}
+        {followedTeamStats.length > 0 && (
+          <div className="mb-14">
+            <SectionHeader title="YOUR TEAMS" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {followedTeamStats.map((fts, i) => {
+                const recordGames = fts.wins + fts.losses + fts.ties
+                return (
+                  <button
+                    key={`${fts.sportId}-${fts.teamName}`}
+                    type="button"
+                    onClick={() => navigate(`/?team=${encodeURIComponent(fts.teamName)}`)}
+                    className="relative bg-paper-deep border-2 border-red p-4 flex flex-col items-center gap-1.5 hover:-translate-y-0.5 transition-all animate-fade-slide-up shadow-[3px_3px_0_var(--color-red)]"
+                    style={{ animationDelay: `${i * 40}ms` }}
+                  >
+                    <span className="absolute top-1.5 right-2 font-bebas text-[9px] tracking-[0.1em] text-red leading-none">★</span>
+                    <TeamBadge team={fts.teamName} sportId={fts.sportId} size="lg" />
+                    <p className="font-bebas text-sm text-ink text-center leading-tight mt-1">{fts.teamName}</p>
+                    {fts.gamesAttended > 0 ? (
+                      <>
+                        <p className="font-bebas text-4xl text-red leading-none">{fts.gamesAttended}</p>
+                        <p className="font-caveat text-sm text-ink/50">games attended</p>
+                        {recordGames > 0 && (
+                          <p className="font-bebas text-sm leading-none">
+                            <span className="text-red">{fts.wins}</span>
+                            <span className="text-ink/40">–{fts.losses}</span>
+                            {fts.ties > 0 && <span className="text-ink/40">–{fts.ties}</span>}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="font-caveat text-xs text-ink/40 text-center">haven't seen live yet</p>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── TEAMS YOU'VE SEEN ── */}
         <div className="mb-14">
           <SectionHeader title="TEAMS YOU'VE SEEN" />
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {teamStats.map((ts, i) => {
-              const isFav = favoriteTeams[ts.sportId] === ts.team
+              const isFav = (followedTeams[ts.sportId] ?? []).includes(ts.team)
               return (
                 <button
                   key={ts.team}

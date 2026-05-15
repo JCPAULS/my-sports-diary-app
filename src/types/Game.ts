@@ -62,4 +62,5 @@ export interface Game {
   attendees?: string[]    // structured array parsed from whoWasThere
   rootingFor?: string     // team name the user was rooting for
   collegeSportType?: string // college games only: "Football", "Basketball (Men's)", etc.
+  outfitPhoto?: string    // single compressed photo of what you wore
 }

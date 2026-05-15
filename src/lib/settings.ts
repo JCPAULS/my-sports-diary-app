@@ -3,7 +3,7 @@ import { getTeam } from '@/lib/teams'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface AppSettings {
-  favoriteTeams: Record<string, string>                            // sportId → teamName
+  followedTeams: Record<string, string[]>  // sportId → [teamName, ...]
   themeMode: 'classic' | 'team'
   primaryFavoriteTeam: { sportId: string; teamName: string } | null
 }
@@ -13,14 +13,23 @@ export interface AppSettings {
 const KEY = 'sports-diary-settings'
 
 function defaults(): AppSettings {
-  return { favoriteTeams: {}, themeMode: 'classic', primaryFavoriteTeam: null }
+  return { followedTeams: {}, themeMode: 'classic', primaryFavoriteTeam: null }
 }
 
 export function getSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return defaults()
-    return { ...defaults(), ...JSON.parse(raw) }
+    const parsed = JSON.parse(raw)
+    // Migrate old favoriteTeams (sportId → single name) → followedTeams (sportId → name[])
+    if (parsed.favoriteTeams && !parsed.followedTeams) {
+      parsed.followedTeams = {}
+      for (const [sportId, teamName] of Object.entries(parsed.favoriteTeams)) {
+        if (teamName) parsed.followedTeams[sportId] = [teamName as string]
+      }
+      delete parsed.favoriteTeams
+    }
+    return { ...defaults(), ...parsed }
   } catch {
     return defaults()
   }

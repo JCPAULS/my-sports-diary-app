@@ -47,6 +47,15 @@ export function saveGame(game: Game): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
 }
 
+export function updateGame(game: Game): void {
+  const raw = localStorage.getItem(STORAGE_KEY)
+  const games: Game[] = raw ? JSON.parse(raw) : []
+  const idx = games.findIndex((g) => g.id === game.id)
+  if (idx >= 0) games[idx] = game
+  else games.push(game)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
+}
+
 export function deleteGame(id: string): void {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (!raw) return

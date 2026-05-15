@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { saveGame, getAllGames } from '@/lib/storage'
+import { saveGame, updateGame, getAllGames } from '@/lib/storage'
 import { fetchTeams, fetchTeamSchedule, fetchGameSummary } from '@/lib/sportsApi'
 import { NFL_WEEKS, WEEK_ORDER, getWeekLabel, NFL_FALLBACK_TEAMS } from '@/lib/nflTeams'
 import { ENABLED_SPORTS, getSport, CUSTOM_LEVELS, COLLEGE_SPORT_TYPES } from '@/lib/sports'
@@ -227,15 +227,40 @@ async function compressImage(file: File): Promise<string> {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AddGame() {
+export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   const navigate = useNavigate()
   const basicsRef = useRef<HTMLDivElement>(null)
   const [newMilestones, setNewMilestones] = useState<Milestone[]>([])
+  const isEditMode = !!initialGame
 
-  const defaultSport = ENABLED_SPORTS[0]?.id ?? 'nfl'
+  const defaultSport = initialGame?.sportId ?? ENABLED_SPORTS[0]?.id ?? 'nfl'
   const defaultSeason = getSport(defaultSport)?.getSeasonOptions()[0] ?? String(new Date().getFullYear())
 
-  const [form, setForm] = useState<FormState>({
+  const [form, setForm] = useState<FormState>(() => initialGame ? {
+    sport: initialGame.sportId ?? 'nfl',
+    week: initialGame.week ?? '',
+    year: initialGame.season ?? defaultSeason,
+    date: initialGame.date ?? '',
+    homeTeam: initialGame.homeTeam,
+    awayTeam: initialGame.awayTeam,
+    homeScore: initialGame.homeScore !== undefined ? String(initialGame.homeScore) : '',
+    awayScore: initialGame.awayScore !== undefined ? String(initialGame.awayScore) : '',
+    venue: initialGame.venue ?? '',
+    section: initialGame.section ?? '',
+    row: initialGame.row ?? '',
+    seatNumbers: initialGame.seatNumbers ?? '',
+    notes: initialGame.notes ?? '',
+    whoWasThere: initialGame.whoWasThere ?? '',
+    mvp: initialGame.mvp ?? '',
+    vibe: initialGame.vibe ?? '',
+    rootingFor: initialGame.rootingFor ?? '',
+    whatYouWore: initialGame.whatYouWore ?? '',
+    whatYouAte: initialGame.whatYouAte ?? '',
+    whoDrove: initialGame.whoDrove ?? '',
+    pregameRitual: initialGame.pregameRitual ?? '',
+    level: initialGame.level ?? '',
+    collegeSportType: initialGame.collegeSportType ?? '',
+  } : {
     sport: defaultSport, week: '', year: defaultSeason, date: '',
     homeTeam: '', awayTeam: '', homeScore: '', awayScore: '',
     venue: '', section: '', row: '', seatNumbers: '',
@@ -250,7 +275,8 @@ export default function AddGame() {
     getAllGames().forEach((g) => g.attendees?.forEach((n) => names.add(n)))
     return [...names].sort()
   })
-  const [photos, setPhotos] = useState<string[]>([])
+  const [photos, setPhotos] = useState<string[]>(initialGame?.photos ?? [])
+  const [outfitPhoto, setOutfitPhoto] = useState<string | null>(initialGame?.outfitPhoto ?? null)
   const [processingCount, setProcessingCount] = useState(0)
   const [storageWarn, setStorageWarn] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -280,8 +306,8 @@ export default function AddGame() {
     setScheduleError(null)
   }, [form.sport]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [appliedSummary, setAppliedSummary] = useState<string | null>(null)
-  const [appliedScheduleLabel, setAppliedScheduleLabel] = useState<string | null>(null)
+  const [appliedSummary, setAppliedSummary] = useState<string | null>(initialGame?.summary ?? null)
+  const [appliedScheduleLabel, setAppliedScheduleLabel] = useState<string | null>(initialGame?.scheduleLabel ?? null)
 
   // Find Your Game state — uses team NAME for searchable combobox, derives ID from teams list
   const [findTeamName, setFindTeamName] = useState('')
@@ -347,10 +373,17 @@ export default function AddGame() {
         if (prev.rootingFor && prev.rootingFor !== newHome && prev.rootingFor !== newAway) {
           next.rootingFor = ''
         }
-        // Auto-default rootingFor to favorite team if it's playing and not yet set
+        // Auto-default rootingFor to a followed team if it's playing and not yet set
         if (!next.rootingFor && newHome && newAway) {
-          const fav = getSettings().favoriteTeams[prev.sport]
-          if (fav && (fav === newHome || fav === newAway)) next.rootingFor = fav
+          const { followedTeams, primaryFavoriteTeam } = getSettings()
+          const primary = primaryFavoriteTeam?.sportId === prev.sport ? primaryFavoriteTeam?.teamName : null
+          if (primary && (primary === newHome || primary === newAway)) {
+            next.rootingFor = primary
+          } else {
+            const followed = followedTeams[prev.sport] ?? []
+            const match = followed.find((f) => f === newHome || f === newAway)
+            if (match) next.rootingFor = match
+          }
         }
       }
       return next
@@ -377,9 +410,13 @@ export default function AddGame() {
 
   function applyGame(game: GameResult) {
     const isPreseason = game.seasonType === 'preseason'
-    const fav = getSettings().favoriteTeams[game.sportId]
+    const { followedTeams, primaryFavoriteTeam } = getSettings()
+    const primary = primaryFavoriteTeam?.sportId === game.sportId ? primaryFavoriteTeam?.teamName : null
+    const followed = followedTeams[game.sportId] ?? []
     const rootingFor =
-      fav && (fav === game.homeTeam || fav === game.awayTeam) ? fav : ''
+      (primary && (primary === game.homeTeam || primary === game.awayTeam))
+        ? primary
+        : (followed.find((f) => f === game.homeTeam || f === game.awayTeam) ?? '')
     setForm((prev) => ({
       ...prev,
       sport: game.sportId,
@@ -423,6 +460,21 @@ export default function AddGame() {
     }
   }
 
+  async function handleOutfitPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setProcessingCount((c) => c + 1)
+    try {
+      const compressed = await compressImage(file)
+      if (compressed) setOutfitPhoto(compressed)
+    } catch (err) {
+      console.warn('Outfit photo processing error:', err)
+    } finally {
+      setProcessingCount((c) => c - 1)
+    }
+  }
+
   function removePhoto(idx: number) { setPhotos((prev) => prev.filter((_, i) => i !== idx)) }
 
   function commitSave() {
@@ -448,7 +500,7 @@ export default function AddGame() {
       ? form.rootingFor : undefined
 
     const game: Game = {
-      id: crypto.randomUUID(),
+      id: initialGame?.id ?? crypto.randomUUID(),
       sportId: form.sport,
       sport: currentSport?.label ?? form.sport.toUpperCase(),
       week: form.week || undefined,
@@ -476,9 +528,26 @@ export default function AddGame() {
       whoDrove: form.whoDrove.trim() || undefined,
       pregameRitual: form.pregameRitual.trim() || undefined,
       photos: photos.length > 0 ? photos : undefined,
+      outfitPhoto: outfitPhoto ?? undefined,
       summary: appliedSummary ?? undefined,
-      createdAt: new Date().toISOString(),
+      createdAt: initialGame?.createdAt ?? new Date().toISOString(),
     }
+
+    if (isEditMode) {
+      try {
+        updateGame(game)
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+          setSaveError("Your device's storage is full and the game couldn't be saved. Try removing a photo from this game, or delete some older games.")
+        } else {
+          setSaveError("Something went wrong saving your game. Please try again.")
+        }
+        return
+      }
+      navigate(`/game/${initialGame!.id}`)
+      return
+    }
+
     const gamesBefore = getAllGames()
     try {
       saveGame(game)
@@ -501,8 +570,9 @@ export default function AddGame() {
   function handleSave() {
     if ((needsWeek && !form.week) || !form.homeTeam.trim() || !form.awayTeam.trim()) return
     if (isCustom && !form.date) return
-    if (photos.length > 0) {
-      const newChars = photos.reduce((sum, p) => sum + p.length, 0)
+    const allPhotos = [...photos, ...(outfitPhoto ? [outfitPhoto] : [])]
+    if (allPhotos.length > 0) {
+      const newChars = allPhotos.reduce((sum, p) => sum + p.length, 0)
       if ((localStorage.getItem('sports-diary-games') ?? '').length + newChars > STORAGE_WARN_CHARS) {
         setStorageWarn(true)
         return
@@ -561,11 +631,13 @@ export default function AddGame() {
       <header className="bg-hero-blue border-b-4 border-ink">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/')}
+            <button onClick={() => navigate(isEditMode ? `/game/${initialGame!.id}` : '/')}
               className="font-bebas text-xl tracking-wider text-ink hover:text-red transition-colors">
               ← Back
             </button>
-            <h1 className="font-bebas text-4xl text-ink leading-none">Add Game</h1>
+            <h1 className="font-bebas text-4xl text-ink leading-none">
+              {isEditMode ? 'Edit Game' : 'Add Game'}
+            </h1>
           </div>
         </div>
       </header>
@@ -573,15 +645,17 @@ export default function AddGame() {
       <main className="max-w-2xl mx-auto px-4 py-8">
         {/* Ticket stub decoration */}
         <div className="hidden md:flex items-center gap-3 mb-8">
-          <div className="bg-ink text-gold font-bebas text-xs tracking-[0.25em] px-3 py-1.5">NEW ENTRY</div>
+          <div className="bg-ink text-gold font-bebas text-xs tracking-[0.25em] px-3 py-1.5">
+            {isEditMode ? 'EDIT ENTRY' : 'NEW ENTRY'}
+          </div>
           <div className="flex-1 border-t-2 border-dashed border-ink/20" />
           <div className="font-bebas text-xs tracking-[0.2em] text-ink/30">
             {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}
           </div>
         </div>
 
-        {/* ── FIND YOUR GAME — hidden for Custom sport ── */}
-        {!isCustom && (
+        {/* ── FIND YOUR GAME — hidden for Custom sport and in edit mode ── */}
+        {!isCustom && !isEditMode && (
           <div className="mb-10 border-2 border-ink/20 bg-paper-deep/40 p-5">
             <div className="flex items-center gap-3 mb-3">
               <h2 className="font-bebas text-xl tracking-[0.2em] text-ink flex-shrink-0">FIND YOUR GAME</h2>
@@ -782,9 +856,15 @@ export default function AddGame() {
         <div className="flex flex-col gap-5 mb-10">
 
           <Field label="Sport">
-            <select value={form.sport} onChange={(e) => set('sport', e.target.value)} className={selectClass}>
-              {ENABLED_SPORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            {isEditMode ? (
+              <div className={`${inputClass} bg-paper-deep text-ink/60 select-none cursor-default`}>
+                {currentSport?.label ?? form.sport}
+              </div>
+            ) : (
+              <select value={form.sport} onChange={(e) => set('sport', e.target.value)} className={selectClass}>
+                {ENABLED_SPORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            )}
           </Field>
 
           {/* College: two-box sport selector + required date */}
@@ -969,9 +1049,30 @@ export default function AddGame() {
           {showLittleThings && (
             <div className="flex flex-col gap-5 mt-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* What You Wore — with outfit photo thumbnail */}
                 <Field label="What You Wore">
-                  <input type="text" value={form.whatYouWore} onChange={(e) => set('whatYouWore', e.target.value)}
-                    placeholder="e.g. Lucky jersey, winter coat" className={inputClass} />
+                  <div className="flex gap-2 items-start">
+                    <input type="text" value={form.whatYouWore} onChange={(e) => set('whatYouWore', e.target.value)}
+                      placeholder="e.g. Lucky jersey, winter coat" className={`${inputClass} flex-1`} />
+                    <div className="flex-shrink-0">
+                      {outfitPhoto ? (
+                        <div className="relative w-[46px] h-[46px] border-2 border-ink shadow-[2px_2px_0_#000]">
+                          <img src={outfitPhoto} alt="Outfit" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => setOutfitPhoto(null)}
+                            className="absolute -top-2 -right-2 w-5 h-5 bg-red border-2 border-ink text-white font-bebas text-xs flex items-center justify-center leading-none hover:bg-red-deep transition-colors"
+                            aria-label="Remove outfit photo">×</button>
+                        </div>
+                      ) : (
+                        <label htmlFor="outfit-photo-upload"
+                          className="flex flex-col items-center justify-center w-[46px] h-[46px] border-2 border-dashed border-ink/40 cursor-pointer hover:border-red transition-colors"
+                          title="Add outfit photo">
+                          <span className="font-bebas text-[9px] tracking-[0.05em] text-ink/40 text-center leading-tight">ADD<br/>PHOTO</span>
+                        </label>
+                      )}
+                      <input id="outfit-photo-upload" type="file" accept="image/*" className="sr-only"
+                        onChange={handleOutfitPhotoUpload} />
+                    </div>
+                  </div>
                 </Field>
                 <Field label="What You Ate">
                   <input type="text" value={form.whatYouAte} onChange={(e) => set('whatYouAte', e.target.value)}
@@ -1006,7 +1107,7 @@ export default function AddGame() {
               {photos.length >= MAX_PHOTOS
                 ? `${MAX_PHOTOS} photos maximum per game`
                 : processingCount > 0
-                ? `Compressing ${processingCount} photo${processingCount > 1 ? 's' : ''}…`
+                ? `Compressing photos…`
                 : `Tap to browse · ${photos.length} / ${MAX_PHOTOS} added`}
             </p>
           </label>
@@ -1025,8 +1126,9 @@ export default function AddGame() {
             </div>
           )}
           {/* Storage usage indicator */}
-          {photos.length > 0 && (() => {
-            const usedMB = ((localStorage.getItem('sports-diary-games') ?? '').length + photos.reduce((s, p) => s + p.length, 0)) / (1024 * 1024)
+          {(photos.length > 0 || outfitPhoto) && (() => {
+            const outfitLen = outfitPhoto?.length ?? 0
+            const usedMB = ((localStorage.getItem('sports-diary-games') ?? '').length + photos.reduce((s, p) => s + p.length, 0) + outfitLen) / (1024 * 1024)
             const color = usedMB > 4 ? 'text-red' : usedMB > 3 ? 'text-gold' : 'text-ink/30'
             return (
               <p className={`font-bebas text-[10px] tracking-[0.15em] mt-2 ${color}`}>
@@ -1070,9 +1172,9 @@ export default function AddGame() {
         <div className="flex gap-3">
           <button onClick={handleSave} disabled={!canSave || processingCount > 0}
             className="flex-1 font-bebas text-2xl tracking-[0.15em] bg-red text-white border-2 border-ink py-4 btn-press disabled:opacity-40 disabled:cursor-not-allowed">
-            Save Game
+            {isEditMode ? 'Save Changes' : 'Save Game'}
           </button>
-          <button onClick={() => navigate('/')}
+          <button onClick={() => navigate(isEditMode ? `/game/${initialGame!.id}` : '/')}
             className="font-bebas text-2xl tracking-[0.15em] text-ink border-2 border-ink px-6 py-4 hover:bg-paper-deep transition-colors">
             Cancel
           </button>
