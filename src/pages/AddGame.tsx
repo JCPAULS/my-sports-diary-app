@@ -191,8 +191,39 @@ function AttendeeInput({ value, onChange, existingAttendees }: {
   )
 }
 
-const MAX_PHOTOS = 5
-const STORAGE_WARN_CHARS = 4 * 1024 * 1024
+const MAX_PHOTOS = 10
+const STORAGE_WARN_CHARS = 4 * 1024 * 1024  // warn at ~4 MB used
+
+const COMPRESS_MAX_DIM = 1600
+const COMPRESS_QUALITY = 0.75
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      let { width, height } = img
+      if (width > COMPRESS_MAX_DIM || height > COMPRESS_MAX_DIM) {
+        if (width >= height) { height = Math.round(height * COMPRESS_MAX_DIM / width); width = COMPRESS_MAX_DIM }
+        else { width = Math.round(width * COMPRESS_MAX_DIM / height); height = COMPRESS_MAX_DIM }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width; canvas.height = height
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+      resolve(canvas.toDataURL('image/jpeg', COMPRESS_QUALITY))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      console.warn('Image load failed, falling back to FileReader')
+      const reader = new FileReader()
+      reader.onload = (ev) => resolve(ev.target!.result as string)
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(file)
+    }
+    img.src = objectUrl
+  })
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -220,6 +251,9 @@ export default function AddGame() {
     return [...names].sort()
   })
   const [photos, setPhotos] = useState<string[]>([])
+  const [processingCount, setProcessingCount] = useState(0)
+  const [storageWarn, setStorageWarn] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [showLittleThings, setShowLittleThings] = useState(true)
   const [autoFilled, setAutoFilled] = useState<Partial<Record<keyof FormState, boolean>>>({})
 
@@ -372,34 +406,28 @@ export default function AddGame() {
     setTimeout(() => basicsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
   }
 
-  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>): void {
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
     const remaining = MAX_PHOTOS - photos.length
-    if (!files.length || remaining <= 0) return
-    Promise.all(
-      files.slice(0, remaining).map(
-        (file) => new Promise<string>((resolve) => {
-          const reader = new FileReader()
-          reader.onload = (ev) => resolve(ev.target!.result as string)
-          reader.readAsDataURL(file)
-        })
-      )
-    ).then((results) => setPhotos((prev) => [...prev, ...results].slice(0, MAX_PHOTOS)))
-    e.target.value = ''
+    const toProcess = files.slice(0, remaining)
+    e.target.value = ''  // reset before async so the same file can be re-selected
+    if (!toProcess.length) return
+    setProcessingCount(toProcess.length)
+    try {
+      const compressed = await Promise.all(toProcess.map(compressImage))
+      setPhotos((prev) => [...prev, ...compressed.filter(Boolean)].slice(0, MAX_PHOTOS))
+    } catch (err) {
+      console.warn('Photo processing error:', err)
+    } finally {
+      setProcessingCount(0)
+    }
   }
 
   function removePhoto(idx: number) { setPhotos((prev) => prev.filter((_, i) => i !== idx)) }
 
-  function handleSave() {
-    if ((needsWeek && !form.week) || !form.homeTeam.trim() || !form.awayTeam.trim()) return
-    if (isCustom && !form.date) return
-
-    if (photos.length > 0) {
-      const newChars = photos.reduce((sum, p) => sum + p.length, 0)
-      if ((localStorage.getItem('sports-diary-games') ?? '').length + newChars > STORAGE_WARN_CHARS) {
-        if (!window.confirm("You're running low on storage. Save anyway?")) return
-      }
-    }
+  function commitSave() {
+    setSaveError(null)
+    setStorageWarn(false)
 
     let scheduleLabel = appliedScheduleLabel
     if (!scheduleLabel && isCollege) {
@@ -452,13 +480,35 @@ export default function AddGame() {
       createdAt: new Date().toISOString(),
     }
     const gamesBefore = getAllGames()
-    saveGame(game)
+    try {
+      saveGame(game)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+        setSaveError("Your device's storage is full and the game couldn't be saved. Try removing a photo from this game, or delete some older games.")
+      } else {
+        setSaveError("Something went wrong saving your game. Please try again.")
+      }
+      return
+    }
     const fresh = detectNewMilestones(gamesBefore, getAllGames())
     if (fresh.length > 0) {
       setNewMilestones(fresh)
     } else {
       navigate('/')
     }
+  }
+
+  function handleSave() {
+    if ((needsWeek && !form.week) || !form.homeTeam.trim() || !form.awayTeam.trim()) return
+    if (isCustom && !form.date) return
+    if (photos.length > 0) {
+      const newChars = photos.reduce((sum, p) => sum + p.length, 0)
+      if ((localStorage.getItem('sports-diary-games') ?? '').length + newChars > STORAGE_WARN_CHARS) {
+        setStorageWarn(true)
+        return
+      }
+    }
+    commitSave()
   }
 
   const canSave = (!needsWeek || form.week) &&
@@ -947,17 +997,21 @@ export default function AddGame() {
         <div className="mb-10">
           <label htmlFor="photo-upload"
             className={`flex flex-col items-center justify-center border-2 border-dashed border-ink/40 p-8 transition-colors ${
-              photos.length >= MAX_PHOTOS ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-red hover:bg-paper-deep/40'
+              photos.length >= MAX_PHOTOS || processingCount > 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-red hover:bg-paper-deep/40'
             }`}>
             <p className="font-bebas text-2xl tracking-[0.15em] text-ink/50">
-              {photos.length >= MAX_PHOTOS ? 'MAX PHOTOS REACHED' : '+ ADD PHOTOS'}
+              {photos.length >= MAX_PHOTOS ? 'MAX PHOTOS REACHED' : processingCount > 0 ? 'PROCESSING…' : '+ ADD PHOTOS'}
             </p>
             <p className="font-caveat text-sm text-ink/30 mt-1">
-              {photos.length >= MAX_PHOTOS ? '5 photos maximum per game' : `Tap to browse · ${photos.length} / ${MAX_PHOTOS} added`}
+              {photos.length >= MAX_PHOTOS
+                ? `${MAX_PHOTOS} photos maximum per game`
+                : processingCount > 0
+                ? `Compressing ${processingCount} photo${processingCount > 1 ? 's' : ''}…`
+                : `Tap to browse · ${photos.length} / ${MAX_PHOTOS} added`}
             </p>
           </label>
           <input id="photo-upload" type="file" accept="image/*" multiple className="sr-only"
-            onChange={handlePhotoUpload} disabled={photos.length >= MAX_PHOTOS} />
+            onChange={handlePhotoUpload} disabled={photos.length >= MAX_PHOTOS || processingCount > 0} />
           {photos.length > 0 && (
             <div className="flex flex-wrap gap-3 mt-5">
               {photos.map((photo, i) => (
@@ -970,12 +1024,51 @@ export default function AddGame() {
               ))}
             </div>
           )}
+          {/* Storage usage indicator */}
+          {photos.length > 0 && (() => {
+            const usedMB = ((localStorage.getItem('sports-diary-games') ?? '').length + photos.reduce((s, p) => s + p.length, 0)) / (1024 * 1024)
+            const color = usedMB > 4 ? 'text-red' : usedMB > 3 ? 'text-gold' : 'text-ink/30'
+            return (
+              <p className={`font-bebas text-[10px] tracking-[0.15em] mt-2 ${color}`}>
+                STORAGE USED: ~{usedMB.toFixed(1)} MB / 5 MB
+              </p>
+            )
+          })()}
         </div>
+
+        {/* ── Storage warning ── */}
+        {storageWarn && (
+          <div className="mb-6 border-2 border-gold bg-paper-deep p-4">
+            <p className="font-bebas text-sm tracking-[0.1em] text-ink mb-1">RUNNING LOW ON STORAGE</p>
+            <p className="font-caveat text-base text-ink/70 mb-4 leading-snug">
+              You're using a lot of storage. Consider removing a photo from this game, or your photos may not save.<br />
+              <span className="text-ink/40 text-sm">(Full photo storage coming when we add accounts.)</span>
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={commitSave}
+                className="font-bebas text-lg tracking-[0.15em] bg-ink text-gold border-2 border-ink px-5 py-2 btn-press">
+                Save anyway
+              </button>
+              <button type="button" onClick={() => setStorageWarn(false)}
+                className="font-bebas text-lg tracking-[0.15em] text-ink border-2 border-ink px-5 py-2 hover:bg-paper-deep transition-colors">
+                Go back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Save error ── */}
+        {saveError && (
+          <div className="mb-6 border-2 border-red bg-paper-deep p-4">
+            <p className="font-bebas text-sm tracking-[0.1em] text-red mb-1">COULDN'T SAVE</p>
+            <p className="font-caveat text-base text-ink/70">{saveError}</p>
+          </div>
+        )}
 
         {/* ── Buttons ── */}
         <div className="border-b-4 border-ink mb-6" />
         <div className="flex gap-3">
-          <button onClick={handleSave} disabled={!canSave}
+          <button onClick={handleSave} disabled={!canSave || processingCount > 0}
             className="flex-1 font-bebas text-2xl tracking-[0.15em] bg-red text-white border-2 border-ink py-4 btn-press disabled:opacity-40 disabled:cursor-not-allowed">
             Save Game
           </button>
