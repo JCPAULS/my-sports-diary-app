@@ -173,6 +173,92 @@ const VENUES: VenueInfo[] = [
   { name: "Memorial Stadium",            lat: 40.1011, lng: -88.2342,  city: "Champaign",      state: "IL" },
 ]
 
+// ─── Sport hints — primary sport for each known venue ────────────────────────
+
+const VENUE_SPORT_HINTS: Record<string, string> = {
+  // NFL
+  "Allegiant Stadium": "nfl", "Arrowhead Stadium": "nfl", "AT&T Stadium": "nfl",
+  "Bank of America Stadium": "nfl", "Caesars Superdome": "nfl",
+  "Empower Field at Mile High": "nfl", "EverBank Stadium": "nfl",
+  "FedExField": "nfl", "FirstEnergy Stadium": "nfl", "Ford Field": "nfl",
+  "Gillette Stadium": "nfl", "Hard Rock Stadium": "nfl", "Highmark Stadium": "nfl",
+  "Huntington Bank Field": "nfl", "Lambeau Field": "nfl", "Levis Stadium": "nfl",
+  "Lincoln Financial Field": "nfl", "Lucas Oil Stadium": "nfl", "M&T Bank Stadium": "nfl",
+  "Mercedes-Benz Stadium": "nfl", "MetLife Stadium": "nfl", "NRG Stadium": "nfl",
+  "Paycor Stadium": "nfl", "Nissan Stadium": "nfl", "Raymond James Stadium": "nfl",
+  "SoFi Stadium": "nfl", "Soldier Field": "nfl", "State Farm Stadium": "nfl",
+  "Lumen Field": "nfl", "U.S. Bank Stadium": "nfl", "Acrisure Stadium": "nfl",
+  "Commanders Field": "nfl",
+  // MLB
+  "Angel Stadium": "mlb", "Busch Stadium": "mlb", "Chase Field": "mlb",
+  "Citizens Bank Park": "mlb", "Citi Field": "mlb", "Comerica Park": "mlb",
+  "Coors Field": "mlb", "Dodger Stadium": "mlb", "Fenway Park": "mlb",
+  "Globe Life Field": "mlb", "Great American Ball Park": "mlb", "Guaranteed Rate Field": "mlb",
+  "Kauffman Stadium": "mlb", "LoanDepot Park": "mlb", "Minute Maid Park": "mlb",
+  "Nationals Park": "mlb", "Oakland Coliseum": "mlb", "Oracle Park": "mlb",
+  "Oriole Park at Camden Yards": "mlb", "PNC Park": "mlb", "Petco Park": "mlb",
+  "Progressive Field": "mlb", "Rogers Centre": "mlb", "T-Mobile Park": "mlb",
+  "Target Field": "mlb", "Tropicana Field": "mlb", "Truist Park": "mlb",
+  "Wrigley Field": "mlb", "Yankee Stadium": "mlb", "American Family Field": "mlb",
+  // NBA/NHL shared (defaulting to one — fetchGameOnDate tries both)
+  "Ball Arena": "nba", "Capital One Arena": "nba", "Chase Center": "nba",
+  "Crypto.com Arena": "nba", "Little Caesars Arena": "nba", "Madison Square Garden": "nba",
+  "PPG Paints Arena": "nhl", "Scotiabank Arena": "nba", "TD Garden": "nba",
+  "United Center": "nba", "Wells Fargo Center": "nba", "Enterprise Center": "nhl",
+  "Xcel Energy Center": "nhl", "American Airlines Center": "nba", "Barclays Center": "nba",
+  "Footprint Center": "nba", "Gainbridge Fieldhouse": "nba", "Golden 1 Center": "nba",
+  "Kaseya Center": "nba", "Moda Center": "nba", "Paycom Center": "nba",
+  "Smoothie King Center": "nba", "Spectrum Center": "nba", "State Farm Arena": "nba",
+  "Toyota Center": "nba", "Vivint Arena": "nba", "Delta Center": "nba",
+  // NHL-only
+  "Amalie Arena": "nhl", "Bell Centre": "nhl", "Canada Life Centre": "nhl",
+  "Canadian Tire Centre": "nhl", "Climate Pledge Arena": "nhl", "FLA Live Arena": "nhl",
+  "Lenovo Center": "nhl", "PNC Arena": "nhl", "Prudential Center": "nhl",
+  "Rogers Place": "nhl", "Scotiabank Saddledome": "nhl", "T-Mobile Arena": "nhl",
+  // MLS
+  "Audi Field": "mls", "America First Field": "mls", "BMO Field": "mls",
+  "BMO Stadium": "mls", "Children's Mercy Park": "mls", "DRV PNK Stadium": "mls",
+  "Dick's Sporting Goods Park": "mls", "Dignity Health Sports Park": "mls",
+  "Exploria Stadium": "mls", "Geodis Park": "mls", "GEODIS Park": "mls",
+  "Lower.com Field": "mls", "Inter&Co Stadium": "mls", "PayPal Park": "mls",
+  "Providence Park": "mls", "Q2 Stadium": "mls", "Red Bull Arena": "mls",
+  "Shell Energy Stadium": "mls", "Subaru Park": "mls", "TQL Stadium": "mls",
+  "Toyota Stadium": "mls",
+  // College
+  "Michigan Stadium": "college", "Ohio Stadium": "college",
+  "Penn State Beaver Stadium": "college", "Tiger Stadium": "college",
+  "Bryant-Denny Stadium": "college", "Kyle Field": "college",
+  "Darrell K Royal Stadium": "college", "Notre Dame Stadium": "college",
+  "Neyland Stadium": "college", "Memorial Stadium": "college",
+}
+
+export function getVenueSportHint(venueName: string): string | null {
+  return VENUE_SPORT_HINTS[venueName] ?? null
+}
+
+// ─── GPS lookup ───────────────────────────────────────────────────────────────
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6_371_000
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export function findVenueByCoords(lat: number, lng: number, maxMeters = 500): VenueInfo | null {
+  let best: VenueInfo | null = null
+  let bestDist = Infinity
+  for (const v of VENUES) {
+    const d = haversineMeters(lat, lng, v.lat, v.lng)
+    if (d < maxMeters && d < bestDist) { bestDist = d; best = v }
+  }
+  return best
+}
+
 // ─── Lookup helper ────────────────────────────────────────────────────────────
 
 function normalize(s: string): string {

@@ -303,6 +303,10 @@ const PARSERS: Record<string, EventParser> = {
   wnba:  parseWnbaEvent,
 }
 
+function normV(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function fetchGameSummary(sportId: string, eventId: string): Promise<string | null> {
@@ -352,6 +356,39 @@ export async function fetchTeams(sportId: string): Promise<Team[]> {
   } catch (err) {
     console.warn(`[espn] fetchTeams(${sportId}) failed:`, err)
     return []
+  }
+}
+
+// Given a date (YYYY-MM-DD) and venue name, fetch the ESPN scoreboard for that
+// sport/date and return the game played at that venue, or null if not found.
+export async function fetchGameOnDate(
+  sportId: string,
+  venueName: string,
+  date: string,
+): Promise<GameResult | null> {
+  try {
+    const base = espnBase(sportId)
+    const dateStr = date.replace(/-/g, '')
+    const data = await espnFetch(`${base}/scoreboard?dates=${dateStr}`)
+    const events: unknown[] = data?.events ?? []
+    const parse = PARSERS[sportId]
+    if (!parse) return null
+    const vnorm = normV(venueName)
+    for (const event of events) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const comp = (event as any)?.competitions?.[0]
+      const evVenue: string = comp?.venue?.fullName ?? ''
+      if (evVenue) {
+        const evNorm = normV(evVenue)
+        if (evNorm === vnorm || evNorm.includes(vnorm) || vnorm.includes(evNorm)) {
+          const season = date.slice(0, 4)
+          return parse(event, season)
+        }
+      }
+    }
+    return null
+  } catch {
+    return null
   }
 }
 

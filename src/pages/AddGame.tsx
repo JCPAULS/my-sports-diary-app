@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveGame, updateGame, getAllGames } from '@/lib/storage'
-import { fetchTeams, fetchTeamSchedule, fetchGameSummary } from '@/lib/sportsApi'
+import { fetchTeams, fetchTeamSchedule, fetchGameSummary, fetchGameOnDate } from '@/lib/sportsApi'
+import { readPhotoMeta } from '@/lib/photoMeta'
+import { findVenueByCoords, getVenueSportHint } from '@/lib/venues'
 import { NFL_WEEKS, WEEK_ORDER, getWeekLabel, NFL_FALLBACK_TEAMS } from '@/lib/nflTeams'
 import { ENABLED_SPORTS, getSport, CUSTOM_LEVELS, COLLEGE_SPORT_TYPES } from '@/lib/sports'
 import { getTeamsBySport } from '@/lib/teams'
@@ -282,6 +284,14 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showLittleThings, setShowLittleThings] = useState(true)
   const [autoFilled, setAutoFilled] = useState<Partial<Record<keyof FormState, boolean>>>({})
+  const [exif, setExif] = useState<{
+    reading: boolean
+    detectedDate: string | null
+    detectedVenue: string | null
+    suggestedGame: GameResult | null
+    suggestionLoading: boolean
+    dismissed: boolean
+  }>({ reading: false, detectedDate: null, detectedVenue: null, suggestedGame: null, suggestionLoading: false, dismissed: false })
 
   // Teams state — static fallback + ESPN live data
   const [teams, setTeams] = useState<Team[]>(NFL_FALLBACK_TEAMS)
@@ -447,14 +457,76 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     const files = Array.from(e.target.files ?? [])
     const remaining = MAX_PHOTOS - photos.length
     const toProcess = files.slice(0, remaining)
-    e.target.value = ''  // reset before async so the same file can be re-selected
+    e.target.value = ''
     if (!toProcess.length) return
+
+    // Capture form values before async so we check against pre-upload state
+    const isFirstUpload = photos.length === 0
+    const currentDate = form.date
+    const currentVenue = form.venue
+    const currentSport = form.sport
+
     setProcessingCount(toProcess.length)
+    if (isFirstUpload) setExif((s) => ({ ...s, reading: true }))
+
     try {
-      const compressed = await Promise.all(toProcess.map(compressImage))
+      // Compress all photos + read EXIF from first one simultaneously
+      const [compressed, meta] = await Promise.all([
+        Promise.all(toProcess.map(compressImage)),
+        isFirstUpload ? readPhotoMeta(toProcess[0]) : Promise.resolve(null),
+      ])
       setPhotos((prev) => [...prev, ...compressed.filter(Boolean)].slice(0, MAX_PHOTOS))
+
+      if (isFirstUpload && meta) {
+        setExif((s) => ({ ...s, reading: false }))
+        const formUpdates: Partial<FormState> = {}
+        const newAutoFilled: Partial<Record<keyof FormState, boolean>> = {}
+        let detectedDate: string | null = null
+        let detectedVenue: string | null = null
+
+        // Auto-fill date if empty
+        if (meta.date && !currentDate) {
+          formUpdates.date = meta.date
+          newAutoFilled.date = true
+          detectedDate = meta.date
+        }
+
+        // Auto-fill venue from GPS if no venue set yet
+        if (meta.lat !== null && meta.lng !== null && !currentVenue) {
+          const matched = findVenueByCoords(meta.lat, meta.lng, 500)
+          if (matched) {
+            formUpdates.venue = matched.name
+            newAutoFilled.venue = true
+            detectedVenue = matched.name
+          }
+        }
+
+        if (Object.keys(formUpdates).length > 0) {
+          setForm((prev) => ({ ...prev, ...formUpdates }))
+          setAutoFilled((prev) => ({ ...prev, ...newAutoFilled }))
+        }
+        setExif((s) => ({ ...s, detectedDate, detectedVenue }))
+
+        // Try game suggestion if we have both date + venue and sport supports API
+        const sportConfig = getSport(currentSport)
+        if (detectedDate && detectedVenue && !sportConfig?.isCustom) {
+          setExif((s) => ({ ...s, suggestionLoading: true }))
+          const hint = getVenueSportHint(detectedVenue)
+          // Try hinted sport first, then fall back to others
+          const sportsToTry = hint
+            ? [hint, ...['nfl', 'mlb', 'nba', 'nhl', 'mls', 'wnba'].filter((s) => s !== hint)]
+            : ['nfl', 'mlb', 'nba', 'nhl', 'mls', 'wnba']
+          let suggested: GameResult | null = null
+          for (const sp of sportsToTry) {
+            suggested = await fetchGameOnDate(sp, detectedVenue, detectedDate)
+            if (suggested) break
+          }
+          setExif((s) => ({ ...s, suggestedGame: suggested, suggestionLoading: false }))
+        }
+      }
     } catch (err) {
       console.warn('Photo processing error:', err)
+      setExif((s) => ({ ...s, reading: false, suggestionLoading: false }))
     } finally {
       setProcessingCount(0)
     }
@@ -851,6 +923,46 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
           </div>
         )}
 
+        {/* ── GAME SUGGESTION (from photo EXIF) ── */}
+        {exif.suggestionLoading && (
+          <div className="mb-6 border-2 border-ink/20 bg-paper-deep/40 px-4 py-3 flex items-center gap-2">
+            <div className="w-3.5 h-3.5 border-2 border-ink/20 border-t-ink/60 rounded-full animate-spin flex-shrink-0" />
+            <span className="font-bebas text-xs tracking-[0.15em] text-ink/40">LOOKING UP GAME FROM YOUR PHOTO…</span>
+          </div>
+        )}
+        {exif.suggestedGame && !exif.dismissed && !exif.suggestionLoading && (
+          <div className="mb-6 border-2 border-gold bg-gold/10 p-4 animate-fade-slide-up">
+            <p className="font-bebas text-[10px] tracking-[0.25em] text-ink/40 mb-1">WE THINK YOU WERE AT</p>
+            <p className="font-bebas text-xl text-ink leading-tight">
+              {exif.suggestedGame.awayTeam} @ {exif.suggestedGame.homeTeam}
+            </p>
+            {exif.suggestedGame.date && (
+              <p className="font-caveat text-sm text-ink/60 mb-3">
+                {exif.suggestedGame.date} · {exif.detectedVenue}
+              </p>
+            )}
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  applyGame(exif.suggestedGame!)
+                  setExif((s) => ({ ...s, dismissed: true }))
+                }}
+                className="font-bebas text-sm tracking-[0.15em] bg-ink text-gold border-2 border-ink px-4 py-2 btn-press"
+              >
+                USE THESE DETAILS
+              </button>
+              <button
+                type="button"
+                onClick={() => setExif((s) => ({ ...s, dismissed: true }))}
+                className="font-bebas text-sm tracking-[0.15em] text-ink border-2 border-ink px-4 py-2 hover:bg-paper-deep transition-colors"
+              >
+                DISMISS
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── THE BASICS ── */}
         <div ref={basicsRef}><SectionHeader title="THE BASICS" /></div>
         <div className="flex flex-col gap-5 mb-10">
@@ -1096,6 +1208,12 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
         {/* ── PHOTOS ── */}
         <SectionHeader title="PHOTOS" />
         <div className="mb-10">
+          {/* Tip — only shown before any photo is added and date is not set */}
+          {photos.length === 0 && !form.date && !isEditMode && (
+            <p className="font-caveat text-sm text-ink/40 mb-3 text-center">
+              Add a photo first — we can pull the date and venue from it automatically.
+            </p>
+          )}
           <label htmlFor="photo-upload"
             className={`flex flex-col items-center justify-center border-2 border-dashed border-ink/40 p-8 transition-colors ${
               photos.length >= MAX_PHOTOS || processingCount > 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-red hover:bg-paper-deep/40'
@@ -1113,6 +1231,12 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
           </label>
           <input id="photo-upload" type="file" accept="image/*" multiple className="sr-only"
             onChange={handlePhotoUpload} disabled={photos.length >= MAX_PHOTOS || processingCount > 0} />
+          {exif.reading && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="w-3 h-3 border-2 border-ink/20 border-t-ink/60 rounded-full animate-spin" />
+              <span className="font-bebas text-[10px] tracking-[0.15em] text-ink/40">READING PHOTO METADATA…</span>
+            </div>
+          )}
           {photos.length > 0 && (
             <div className="flex flex-wrap gap-3 mt-5">
               {photos.map((photo, i) => (
