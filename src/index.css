@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #000000;
+  --color-paper: #faf2dd;
+  --color-paper-deep: #ede0bf;
+  --color-red: #c8312b;
+  --color-red-deep: #8a1f1a;
+  --color-gold: #d4a017;
+  --color-navy: #1a2c4e;
+  --color-hero-blue: #a8d8ea;
+
+  --font-bebas: "Bebas Neue", sans-serif;
+  --font-archivo: "Archivo", sans-serif;
+  --font-caveat: "Caveat", cursive;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-archivo);
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+}
+
+/* Hard offset shadow + press effect — buttons */
+.btn-press {
+  box-shadow: 4px 4px 0 var(--color-ink);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.btn-press:not(:disabled):hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+.btn-press:not(:disabled):active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+/* Hard offset shadow — interactive cards */
+.card-press {
+  box-shadow: 4px 4px 0 var(--color-ink);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.card-press:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+
+/* Hard offset shadow — static (detail view) */
+.card-stamp {
+  box-shadow: 6px 6px 0 var(--color-ink);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+
+@keyframes fade-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Pulsing glow on the red timeline node — highlights the newest entry */
+@keyframes pulse-node {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-red) 0%, transparent); }
+  50%       { box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-red) 35%, transparent); }
+}
+
+.animate-fade-slide-up {
+  animation: fade-slide-up 0.35s ease-out both;
+}
+
+.animate-pulse-node {
+  animation: pulse-node 0.8s ease-in-out 3;
+}
