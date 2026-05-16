@@ -293,6 +293,16 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     dismissed: boolean
   }>({ reading: false, detectedDate: null, detectedVenue: null, suggestedGame: null, suggestionLoading: false, dismissed: false })
 
+  const [findPhoto, setFindPhoto] = useState<{
+    thumbnail: string | null
+    compressedData: string | null
+    processing: boolean
+    outcome: 'full' | 'partial' | 'none' | null
+    message: string | null
+    suggestedGame: GameResult | null
+  }>({ thumbnail: null, compressedData: null, processing: false, outcome: null, message: null, suggestedGame: null })
+  const [findPhotoDragOver, setFindPhotoDragOver] = useState(false)
+
   // Teams state — static fallback + ESPN live data
   const [teams, setTeams] = useState<Team[]>(NFL_FALLBACK_TEAMS)
   const [isLoadingTeams, setIsLoadingTeams] = useState(false)
@@ -415,6 +425,97 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       setScheduleError("Couldn't load the schedule — check your connection or try again.")
     } finally {
       setIsLoadingSchedule(false)
+    }
+  }
+
+  async function handleFindPhotoFile(file: File) {
+    const currentDate = form.date
+    const currentVenue = form.venue
+    setFindPhoto({ thumbnail: null, compressedData: null, processing: true, outcome: null, message: null, suggestedGame: null })
+    try {
+      const [compressed, meta] = await Promise.all([compressImage(file), readPhotoMeta(file)])
+      setFindPhoto((s) => ({ ...s, thumbnail: compressed, compressedData: compressed }))
+
+      let detectedDate: string | null = meta.date
+      let detectedVenue: string | null = null
+
+      if (meta.date && !currentDate) {
+        setForm((prev) => ({ ...prev, date: meta.date! }))
+        setAutoFilled((prev) => ({ ...prev, date: true }))
+      }
+      if (meta.lat !== null && meta.lng !== null) {
+        const matched = findVenueByCoords(meta.lat, meta.lng, 500)
+        if (matched) {
+          detectedVenue = matched.name
+          if (!currentVenue) {
+            setForm((prev) => ({ ...prev, venue: matched.name }))
+            setAutoFilled((prev) => ({ ...prev, venue: true }))
+          }
+        }
+      }
+
+      // OUTCOME 3 — no date and no GPS at all
+      if (!detectedDate && meta.lat === null) {
+        setFindPhoto((s) => ({
+          ...s, processing: false, outcome: 'none',
+          message: "We couldn't read game info from this photo — it'll still be saved with your game. Pick a team and season below, or fill in manually.",
+        }))
+        return
+      }
+
+      // OUTCOME 2 — no venue match (date only, or GPS but not a known venue)
+      if (!detectedVenue) {
+        const dateLabel = detectedDate ? formatDate(detectedDate) : null
+        setFindPhoto((s) => ({
+          ...s, processing: false, outcome: 'partial',
+          message: dateLabel
+            ? `Got the date (${dateLabel}) from your photo — pick a team and season to find the game.`
+            : "We spotted GPS data but couldn't match a venue. Pick a team and season below.",
+        }))
+        return
+      }
+
+      // OUTCOME 2 — venue found but no date
+      if (!detectedDate) {
+        setFindPhoto((s) => ({
+          ...s, processing: false, outcome: 'partial',
+          message: `Found the venue (${detectedVenue}) but couldn't read a date. Pick a team and season to find the game.`,
+        }))
+        return
+      }
+
+      // Both date + venue — try game lookup across all sports
+      const hint = getVenueSportHint(detectedVenue)
+      const sportsToTry = hint
+        ? [hint, ...['nfl', 'mlb', 'nba', 'nhl', 'mls', 'wnba'].filter((sp) => sp !== hint)]
+        : ['nfl', 'mlb', 'nba', 'nhl', 'mls', 'wnba']
+      let suggested: GameResult | null = null
+      for (const sp of sportsToTry) {
+        suggested = await fetchGameOnDate(sp, detectedVenue, detectedDate)
+        if (suggested) break
+      }
+
+      if (suggested) {
+        // OUTCOME 1 — full match
+        applyGame(suggested)
+        const dateLabel = suggested.date ? formatDate(suggested.date) : detectedDate
+        setFindPhoto((s) => ({
+          ...s, processing: false, outcome: 'full', suggestedGame: suggested,
+          message: `${suggested.awayTeam} @ ${suggested.homeTeam} · ${dateLabel} · ${detectedVenue}`,
+        }))
+      } else {
+        // OUTCOME 2 — venue + date found but no matching game in ESPN
+        setFindPhoto((s) => ({
+          ...s, processing: false, outcome: 'partial',
+          message: `Got the date and venue (${detectedVenue}) from your photo — pick a team and season to find the specific game.`,
+        }))
+      }
+    } catch (err) {
+      console.warn('Find-photo processing error:', err)
+      setFindPhoto((s) => ({
+        ...s, processing: false, outcome: 'none',
+        message: "Something went wrong reading this photo. Pick a team and season below.",
+      }))
     }
   }
 
@@ -551,6 +652,9 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   function commitSave() {
     setSaveError(null)
     setStorageWarn(false)
+    const finalPhotos = findPhoto.compressedData
+      ? [findPhoto.compressedData, ...photos].slice(0, MAX_PHOTOS)
+      : photos
 
     let scheduleLabel = appliedScheduleLabel
     if (!scheduleLabel && isCollege) {
@@ -598,7 +702,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       whatYouAte: form.whatYouAte.trim() || undefined,
       whoDrove: form.whoDrove.trim() || undefined,
       pregameRitual: form.pregameRitual.trim() || undefined,
-      photos: photos.length > 0 ? photos : undefined,
+      photos: finalPhotos.length > 0 ? finalPhotos : undefined,
       outfitPhoto: outfitPhoto ?? undefined,
       summary: appliedSummary ?? undefined,
       createdAt: initialGame?.createdAt ?? new Date().toISOString(),
@@ -641,7 +745,11 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   function handleSave() {
     if ((needsWeek && !form.week) || !form.homeTeam.trim() || !form.awayTeam.trim()) return
     if (isCustom && !form.date) return
-    const allPhotos = [...photos, ...(outfitPhoto ? [outfitPhoto] : [])]
+    const allPhotos = [
+      ...(findPhoto.compressedData ? [findPhoto.compressedData] : []),
+      ...photos,
+      ...(outfitPhoto ? [outfitPhoto] : []),
+    ]
     if (allPhotos.length > 0) {
       const newChars = allPhotos.reduce((sum, p) => sum + p.length, 0)
       if ((localStorage.getItem('sports-diary-games') ?? '').length + newChars > STORAGE_WARN_CHARS) {
@@ -733,9 +841,104 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
               <div className="flex-1 h-[2px] bg-ink/20" />
             </div>
             <p className="font-caveat text-base text-ink/50 mb-4">
-              Pick a team and season to auto-fill from that schedule. Or skip and fill in manually below.
+              Drop a photo from the game and we'll find it automatically — or pick a team and season to browse the schedule.
             </p>
 
+            {/* ── Photo drop zone ── */}
+            <div
+              className={`border-2 border-dashed transition-colors ${
+                findPhotoDragOver
+                  ? 'border-red bg-red/5'
+                  : findPhoto.outcome === 'full'
+                  ? 'border-gold bg-gold/5'
+                  : 'border-ink/40 bg-paper'
+              }`}
+              onDragOver={(e) => { e.preventDefault(); if (!findPhoto.processing) setFindPhotoDragOver(true) }}
+              onDragLeave={() => setFindPhotoDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setFindPhotoDragOver(false)
+                const file = e.dataTransfer.files[0]
+                if (file && !findPhoto.processing) handleFindPhotoFile(file)
+              }}
+            >
+              {!findPhoto.thumbnail && !findPhoto.processing ? (
+                /* Empty state */
+                <label htmlFor="find-photo-upload" className="flex flex-col items-center justify-center gap-2 p-6 cursor-pointer hover:bg-paper-deep/30 transition-colors">
+                  <svg className="w-8 h-8 text-ink/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p className="font-bebas text-sm tracking-[0.15em] text-ink/50 text-center">DROP A PHOTO FROM THE GAME</p>
+                  <p className="font-caveat text-xs text-ink/30 text-center">Click to browse or drag a photo — we'll read the date and location</p>
+                </label>
+              ) : !findPhoto.thumbnail && findPhoto.processing ? (
+                /* Compressing — thumbnail not ready yet */
+                <div className="flex flex-col items-center justify-center gap-2 p-6">
+                  <div className="w-6 h-6 border-2 border-ink/20 border-t-ink/60 rounded-full animate-spin" />
+                  <p className="font-bebas text-xs tracking-[0.15em] text-ink/40">READING PHOTO…</p>
+                </div>
+              ) : (
+                /* Thumbnail + status */
+                <div className="p-3 flex items-start gap-3">
+                  <div className="relative flex-shrink-0 w-16 h-16 border-2 border-ink shadow-[2px_2px_0_#000]">
+                    <img src={findPhoto.thumbnail!} alt="Game photo" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setFindPhoto({ thumbnail: null, compressedData: null, processing: false, outcome: null, message: null, suggestedGame: null })}
+                      className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red border-2 border-ink text-white font-bebas text-base flex items-center justify-center leading-none hover:bg-red-deep transition-colors"
+                      aria-label="Remove photo"
+                    >×</button>
+                  </div>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    {findPhoto.processing ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 border-2 border-ink/20 border-t-ink/60 rounded-full animate-spin flex-shrink-0" />
+                        <span className="font-bebas text-xs tracking-[0.15em] text-ink/40">FINDING YOUR GAME…</span>
+                      </div>
+                    ) : (
+                      <>
+                        {findPhoto.outcome === 'full' && (
+                          <p className="font-bebas text-[10px] tracking-[0.2em] text-gold mb-1">FOUND IT ✓</p>
+                        )}
+                        <p className={`font-caveat text-sm leading-snug ${
+                          findPhoto.outcome === 'full' ? 'text-ink' : 'text-ink/60'
+                        }`}>
+                          {findPhoto.message}
+                        </p>
+                        {findPhoto.outcome !== 'full' && (
+                          <label
+                            htmlFor="find-photo-upload"
+                            className="font-bebas text-[10px] tracking-[0.15em] text-ink/35 hover:text-red cursor-pointer transition-colors mt-1.5 inline-block"
+                          >
+                            TRY A DIFFERENT PHOTO
+                          </label>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              <input
+                id="find-photo-upload" type="file" accept="image/*" className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (file) handleFindPhotoFile(file)
+                }}
+              />
+            </div>
+
+            {/* ── OR divider ── */}
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-px bg-ink/15" />
+              <span className="font-bebas text-xs tracking-[0.2em] text-ink/25">
+                {findPhoto.outcome === 'full' ? 'OR PICK MANUALLY TO OVERRIDE' : 'OR PICK MANUALLY'}
+              </span>
+              <div className="flex-1 h-px bg-ink/15" />
+            </div>
+
+            {/* ── Team + season pickers ── */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="flex flex-col gap-1.5">
                 <label className="font-bebas text-xs tracking-[0.2em] text-ink">TEAM</label>
@@ -1249,9 +1452,10 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
             </div>
           )}
           {/* Storage usage indicator */}
-          {(photos.length > 0 || outfitPhoto) && (() => {
+          {(photos.length > 0 || outfitPhoto || findPhoto.compressedData) && (() => {
             const outfitLen = outfitPhoto?.length ?? 0
-            const usedMB = ((localStorage.getItem('sports-diary-games') ?? '').length + photos.reduce((s, p) => s + p.length, 0) + outfitLen) / (1024 * 1024)
+            const findLen = findPhoto.compressedData?.length ?? 0
+            const usedMB = ((localStorage.getItem('sports-diary-games') ?? '').length + photos.reduce((s, p) => s + p.length, 0) + outfitLen + findLen) / (1024 * 1024)
             const color = usedMB > 4 ? 'text-red' : usedMB > 3 ? 'text-gold' : 'text-ink/30'
             return (
               <p className={`font-bebas text-[10px] tracking-[0.15em] mt-2 ${color}`}>
