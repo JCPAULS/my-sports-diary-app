@@ -419,7 +419,6 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   }
 
   function applyGame(game: GameResult) {
-    const isPreseason = game.seasonType === 'preseason'
     const { followedTeams, primaryFavoriteTeam } = getSettings()
     const primary = primaryFavoriteTeam?.sportId === game.sportId ? primaryFavoriteTeam?.teamName : null
     const followed = followedTeams[game.sportId] ?? []
@@ -431,7 +430,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       ...prev,
       sport: game.sportId,
       year: game.season ?? findSeason,
-      week: !isPreseason ? (game.week ?? prev.week) : prev.week,
+      week: game.week ?? prev.week,
       date: game.date,
       awayTeam: game.awayTeam, homeTeam: game.homeTeam,
       awayScore: game.awayScore != null ? String(game.awayScore) : prev.awayScore,
@@ -441,7 +440,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     }))
     setAutoFilled({
       year: true, date: true, awayTeam: true, homeTeam: true,
-      ...(!isPreseason && game.week && { week: true }),
+      ...(game.week && { week: true }),
       ...(game.awayScore != null && { awayScore: true }),
       ...(game.homeScore != null && { homeScore: true }),
       ...(game.venue && { venue: true }),

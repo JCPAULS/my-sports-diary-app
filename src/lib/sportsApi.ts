@@ -55,6 +55,15 @@ function isFinalComp(comp: any): boolean {
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseCompScore(competitor: any): number | undefined {
+  const s = competitor?.score
+  if (s == null) return undefined
+  if (typeof s === 'string') return s !== '' ? Number(s) : undefined
+  if (typeof s === 'object' && s.displayValue !== undefined) return Number(s.displayValue)
+  return undefined
+}
+
 // ─── NFL-specific parsing ─────────────────────────────────────────────────────
 
 function nflPostseasonWeekKey(weekNum: number): string {
@@ -82,17 +91,18 @@ function parseNflEvent(event: any, season: string): GameResult | null {
     const { home, away } = teams
 
     const isFinal = isFinalComp(comp)
-    const homeScore = isFinal ? Number(home.score?.displayValue) : undefined
-    const awayScore = isFinal ? Number(away.score?.displayValue) : undefined
     const seasonTypeNum: number = event.seasonType?.type ?? 2
     const weekNum: number = event.week?.number ?? 0
     const seasonType = seasonTypeNum === 1 ? 'preseason' : seasonTypeNum === 3 ? 'postseason' : 'regular'
+    // ESPN numbers preseason starting at week 2 (week 1 = Hall of Fame game, not attended by most teams)
     const week = seasonTypeNum === 3 ? nflPostseasonWeekKey(weekNum)
-      : seasonTypeNum === 1 ? `pre_${weekNum}` : String(weekNum)
+      : seasonTypeNum === 1 ? `pre_${Math.max(1, weekNum - 1)}` : String(weekNum)
+    const homeScore = isFinal ? parseCompScore(home) : undefined
+    const awayScore = isFinal ? parseCompScore(away) : undefined
     return {
       id: event.id ?? '', sportId: 'nfl', date: (event.date ?? '').slice(0, 10),
       week, season, homeTeam: home.team?.displayName ?? '', awayTeam: away.team?.displayName ?? '',
-      homeScore: isNaN(homeScore!) ? undefined : homeScore, awayScore: isNaN(awayScore!) ? undefined : awayScore,
+      homeScore, awayScore,
       venue: comp.venue?.fullName ?? undefined, seasonType,
       scheduleLabel: nflScheduleLabel(week, season, seasonTypeNum),
     }
@@ -130,8 +140,8 @@ function parseMlbEvent(event: any, season: string): GameResult | null {
     return {
       id: event.id ?? '', sportId: 'mlb', date: (event.date ?? '').slice(0, 10),
       season, homeTeam: home.team?.displayName ?? '', awayTeam: away.team?.displayName ?? '',
-      homeScore: isFinal ? Number(home.score?.displayValue) : undefined,
-      awayScore: isFinal ? Number(away.score?.displayValue) : undefined,
+      homeScore: isFinal ? parseCompScore(home) : undefined,
+      awayScore: isFinal ? parseCompScore(away) : undefined,
       venue: comp.venue?.fullName ?? undefined, seasonType, scheduleLabel,
     }
   } catch { return null }
@@ -169,8 +179,8 @@ function parseNbaEvent(event: any, season: string): GameResult | null {
     return {
       id: event.id ?? '', sportId: 'nba', date: (event.date ?? '').slice(0, 10),
       season, homeTeam: home.team?.displayName ?? '', awayTeam: away.team?.displayName ?? '',
-      homeScore: isFinal ? Number(home.score?.displayValue) : undefined,
-      awayScore: isFinal ? Number(away.score?.displayValue) : undefined,
+      homeScore: isFinal ? parseCompScore(home) : undefined,
+      awayScore: isFinal ? parseCompScore(away) : undefined,
       venue: comp.venue?.fullName ?? undefined, seasonType, scheduleLabel,
     }
   } catch { return null }
@@ -208,8 +218,8 @@ function parseNhlEvent(event: any, season: string): GameResult | null {
     return {
       id: event.id ?? '', sportId: 'nhl', date: (event.date ?? '').slice(0, 10),
       season, homeTeam: home.team?.displayName ?? '', awayTeam: away.team?.displayName ?? '',
-      homeScore: isFinal ? Number(home.score?.displayValue) : undefined,
-      awayScore: isFinal ? Number(away.score?.displayValue) : undefined,
+      homeScore: isFinal ? parseCompScore(home) : undefined,
+      awayScore: isFinal ? parseCompScore(away) : undefined,
       venue: comp.venue?.fullName ?? undefined, seasonType, scheduleLabel,
     }
   } catch { return null }
@@ -246,8 +256,8 @@ function parseMlsEvent(event: any, season: string): GameResult | null {
     return {
       id: event.id ?? '', sportId: 'mls', date: (event.date ?? '').slice(0, 10),
       season, homeTeam: home.team?.displayName ?? '', awayTeam: away.team?.displayName ?? '',
-      homeScore: isFinal ? Number(home.score?.displayValue) : undefined,
-      awayScore: isFinal ? Number(away.score?.displayValue) : undefined,
+      homeScore: isFinal ? parseCompScore(home) : undefined,
+      awayScore: isFinal ? parseCompScore(away) : undefined,
       venue: comp.venue?.fullName ?? undefined, seasonType, scheduleLabel,
     }
   } catch { return null }
@@ -283,8 +293,8 @@ function parseWnbaEvent(event: any, season: string): GameResult | null {
     return {
       id: event.id ?? '', sportId: 'wnba', date: (event.date ?? '').slice(0, 10),
       season, homeTeam: home.team?.displayName ?? '', awayTeam: away.team?.displayName ?? '',
-      homeScore: isFinal ? Number(home.score?.displayValue) : undefined,
-      awayScore: isFinal ? Number(away.score?.displayValue) : undefined,
+      homeScore: isFinal ? parseCompScore(home) : undefined,
+      awayScore: isFinal ? parseCompScore(away) : undefined,
       venue: comp.venue?.fullName ?? undefined, seasonType, scheduleLabel,
     }
   } catch { return null }
