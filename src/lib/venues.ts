@@ -4,10 +4,12 @@ export interface VenueInfo {
   lng: number
   city: string
   state: string
+  photoUrl?: string | null
 }
 
 export interface MapPin extends VenueInfo {
   gameCount: number
+  teams?: string[]
 }
 
 // ─── Venue database ───────────────────────────────────────────────────────────
@@ -234,6 +236,143 @@ const VENUE_SPORT_HINTS: Record<string, string> = {
 
 export function getVenueSportHint(venueName: string): string | null {
   return VENUE_SPORT_HINTS[venueName] ?? null
+}
+
+// ─── Stadium photos (Wikimedia Commons Special:FilePath) ──────────────────────
+
+const _fp = (f: string) => `https://commons.wikimedia.org/wiki/Special:FilePath/${f}`
+
+const VENUE_PHOTOS: Partial<Record<string, string>> = {
+  // NFL
+  "Allegiant Stadium":           _fp("Allegiant_Stadium_2020.jpg"),
+  "Arrowhead Stadium":           _fp("Arrowhead_Stadium_aerial.jpg"),
+  "AT&T Stadium":                _fp("AT%26T_Stadium_2010.jpg"),
+  "Bank of America Stadium":     _fp("Bank_of_America_Stadium.jpg"),
+  "Caesars Superdome":           _fp("Caesars_Superdome.jpg"),
+  "Empower Field at Mile High":  _fp("Empower_Field_at_Mile_High.jpg"),
+  "EverBank Stadium":            _fp("EverBank_Field.jpg"),
+  "FedExField":                  _fp("FedExField_aerial.jpg"),
+  "Ford Field":                  _fp("Ford_Field_exterior.jpg"),
+  "Gillette Stadium":            _fp("Gillette_Stadium_aerial.jpg"),
+  "Hard Rock Stadium":           _fp("Hard_Rock_Stadium.jpg"),
+  "Highmark Stadium":            _fp("Highmark_Stadium.jpg"),
+  "Huntington Bank Field":       _fp("FirstEnergy_Stadium.jpg"),
+  "Lambeau Field":               _fp("Lambeau_Field_aerial.jpg"),
+  "Levis Stadium":               _fp("Levi%27s_Stadium.jpg"),
+  "Lincoln Financial Field":     _fp("Lincoln_Financial_Field.jpg"),
+  "Lucas Oil Stadium":           _fp("Lucas_Oil_Stadium.jpg"),
+  "M&T Bank Stadium":            _fp("M%26T_Bank_Stadium.jpg"),
+  "Mercedes-Benz Stadium":       _fp("Mercedes-Benz_Stadium.jpg"),
+  "MetLife Stadium":             _fp("MetLife_Stadium_aerial.jpg"),
+  "NRG Stadium":                 _fp("NRG_Stadium.jpg"),
+  "Paycor Stadium":              _fp("Paycor_Stadium.jpg"),
+  "Nissan Stadium":              _fp("Nissan_Stadium.jpg"),
+  "Raymond James Stadium":       _fp("Raymond_James_Stadium_aerial.jpg"),
+  "SoFi Stadium":                _fp("SoFi_Stadium.jpg"),
+  "Soldier Field":               _fp("Soldier_Field_2010.jpg"),
+  "State Farm Stadium":          _fp("State_Farm_Stadium.jpg"),
+  "Lumen Field":                 _fp("Lumen_Field.jpg"),
+  "U.S. Bank Stadium":           _fp("US_Bank_Stadium_aerial.jpg"),
+  "Acrisure Stadium":            _fp("Acrisure_Stadium.jpg"),
+  "Commanders Field":            _fp("FedExField_aerial.jpg"),
+  // MLB
+  "Angel Stadium":               _fp("Angel_Stadium_of_Anaheim.jpg"),
+  "Busch Stadium":               _fp("Busch_Stadium_aerial.jpg"),
+  "Chase Field":                 _fp("Chase_Field.jpg"),
+  "Citizens Bank Park":          _fp("Citizens_Bank_Park_aerial.jpg"),
+  "Citi Field":                  _fp("Citi_Field.jpg"),
+  "Comerica Park":               _fp("Comerica_Park_aerial.jpg"),
+  "Coors Field":                 _fp("Coors_Field.jpg"),
+  "Dodger Stadium":              _fp("Dodger_Stadium.jpg"),
+  "Fenway Park":                 _fp("Fenway_from_air.jpg"),
+  "Globe Life Field":            _fp("Globe_Life_Field.jpg"),
+  "Great American Ball Park":    _fp("Great_American_Ball_Park.jpg"),
+  "Guaranteed Rate Field":       _fp("Guaranteed_Rate_Field.jpg"),
+  "Kauffman Stadium":            _fp("Kauffman_Stadium_aerial.jpg"),
+  "LoanDepot Park":              _fp("LoanDepot_Park.jpg"),
+  "Minute Maid Park":            _fp("Minute_Maid_Park.jpg"),
+  "Nationals Park":              _fp("Nationals_Park.jpg"),
+  "Oakland Coliseum":            _fp("Oakland_Coliseum.jpg"),
+  "Oracle Park":                 _fp("Oracle_Park.jpg"),
+  "Oriole Park at Camden Yards": _fp("Oriole_Park_at_Camden_Yards.jpg"),
+  "PNC Park":                    _fp("PNC_Park_aerial.jpg"),
+  "Petco Park":                  _fp("Petco_Park.jpg"),
+  "Progressive Field":           _fp("Progressive_Field.jpg"),
+  "Rogers Centre":               _fp("Rogers_Centre.jpg"),
+  "T-Mobile Park":               _fp("T-Mobile_Park.jpg"),
+  "Target Field":                _fp("Target_Field.jpg"),
+  "Tropicana Field":             _fp("Tropicana_Field.jpg"),
+  "Truist Park":                 _fp("Truist_Park.jpg"),
+  "Wrigley Field":               _fp("Wrigley_Field_aerial_2006.jpg"),
+  "Yankee Stadium":              _fp("Yankee_Stadium_aerial.jpg"),
+  "American Family Field":       _fp("American_Family_Field.jpg"),
+  // NBA / NHL shared
+  "Ball Arena":                  _fp("Ball_Arena.jpg"),
+  "Capital One Arena":           _fp("Capital_One_Arena.jpg"),
+  "Chase Center":                _fp("Chase_Center.jpg"),
+  "Crypto.com Arena":            _fp("Staples_Center.jpg"),
+  "Little Caesars Arena":        _fp("Little_Caesars_Arena.jpg"),
+  "Madison Square Garden":       _fp("Madison_Square_Garden_2013.jpg"),
+  "PPG Paints Arena":            _fp("PPG_Paints_Arena.jpg"),
+  "Scotiabank Arena":            _fp("Scotiabank_Arena.jpg"),
+  "TD Garden":                   _fp("TD_Garden.jpg"),
+  "United Center":               _fp("United_Center.jpg"),
+  "Wells Fargo Center":          _fp("Wells_Fargo_Center.jpg"),
+  "Enterprise Center":           _fp("Enterprise_Center.jpg"),
+  "Xcel Energy Center":          _fp("Xcel_Energy_Center.jpg"),
+  // NBA-only
+  "American Airlines Center":    _fp("American_Airlines_Center.jpg"),
+  "Barclays Center":             _fp("Barclays_Center.jpg"),
+  "Footprint Center":            _fp("Footprint_Center.jpg"),
+  "Gainbridge Fieldhouse":       _fp("Gainbridge_Fieldhouse.jpg"),
+  "Golden 1 Center":             _fp("Golden_1_Center.jpg"),
+  "Kaseya Center":               _fp("Kaseya_Center.jpg"),
+  "Moda Center":                 _fp("Moda_Center.jpg"),
+  "Paycom Center":               _fp("Paycom_Center.jpg"),
+  "Smoothie King Center":        _fp("Smoothie_King_Center.jpg"),
+  "Spectrum Center":             _fp("Spectrum_Center.jpg"),
+  "State Farm Arena":            _fp("State_Farm_Arena.jpg"),
+  "Toyota Center":               _fp("Toyota_Center.jpg"),
+  "Delta Center":                _fp("Delta_Center.jpg"),
+  // NHL-only
+  "Amalie Arena":                _fp("Amalie_Arena.jpg"),
+  "Bell Centre":                 _fp("Bell_Centre.jpg"),
+  "Canada Life Centre":          _fp("Canada_Life_Centre.jpg"),
+  "Canadian Tire Centre":        _fp("Canadian_Tire_Centre.jpg"),
+  "Climate Pledge Arena":        _fp("Climate_Pledge_Arena.jpg"),
+  "FLA Live Arena":              _fp("FLA_Live_Arena.jpg"),
+  "Lenovo Center":               _fp("Lenovo_Center.jpg"),
+  "Prudential Center":           _fp("Prudential_Center.jpg"),
+  "Rogers Place":                _fp("Rogers_Place.jpg"),
+  "Scotiabank Saddledome":       _fp("Scotiabank_Saddledome.jpg"),
+  "T-Mobile Arena":              _fp("T-Mobile_Arena.jpg"),
+  // MLS
+  "Audi Field":                  _fp("Audi_Field.jpg"),
+  "BMO Field":                   _fp("BMO_Field.jpg"),
+  "BMO Stadium":                 _fp("BMO_Stadium.jpg"),
+  "Children's Mercy Park":       _fp("Children%27s_Mercy_Park.jpg"),
+  "Geodis Park":                 _fp("Geodis_Park.jpg"),
+  "GEODIS Park":                 _fp("Geodis_Park.jpg"),
+  "Providence Park":             _fp("Providence_Park.jpg"),
+  "Q2 Stadium":                  _fp("Q2_Stadium.jpg"),
+  "Red Bull Arena":              _fp("Red_Bull_Arena.jpg"),
+  "TQL Stadium":                 _fp("TQL_Stadium.jpg"),
+  // College
+  "Michigan Stadium":            _fp("Michigan_Stadium.jpg"),
+  "Ohio Stadium":                _fp("Ohio_Stadium_aerial.jpg"),
+  "Penn State Beaver Stadium":   _fp("Penn_State_Beaver_Stadium.jpg"),
+  "Tiger Stadium":               _fp("Tiger_Stadium_aerial.jpg"),
+  "Bryant-Denny Stadium":        _fp("Bryant-Denny_Stadium.jpg"),
+  "Kyle Field":                  _fp("Kyle_Field.jpg"),
+  "Darrell K Royal Stadium":     _fp("Darrell_K_Royal_Texas_Memorial_Stadium.jpg"),
+  "Rose Bowl":                   _fp("Rose_Bowl_Stadium_aerial.jpg"),
+  "Notre Dame Stadium":          _fp("Notre_Dame_Stadium.jpg"),
+  "Neyland Stadium":             _fp("Neyland_Stadium.jpg"),
+  "Memorial Stadium":            _fp("Memorial_Stadium_Illinois.jpg"),
+}
+
+export function getVenuePhoto(venueName: string): string | null {
+  return VENUE_PHOTOS[venueName] ?? null
 }
 
 // ─── GPS lookup ───────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { getAllGames } from '@/lib/storage'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport } from '@/lib/sports'
 import { getAllMilestones, type Milestone } from '@/lib/milestones'
-import { getVenueCoordinates, type MapPin } from '@/lib/venues'
+import { getVenueCoordinates, getVenuePhoto, type MapPin } from '@/lib/venues'
 import { getSettings } from '@/lib/settings'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
@@ -273,8 +273,18 @@ export default function Stats() {
 
   // Stadium map: count games per venue, deduplicate, resolve coordinates
   const venueGameCounts: Record<string, number> = {}
+  const coordTeams: Record<string, Set<string>> = {}
   for (const g of games) {
-    if (g.venue) venueGameCounts[g.venue] = (venueGameCounts[g.venue] ?? 0) + 1
+    if (g.venue) {
+      venueGameCounts[g.venue] = (venueGameCounts[g.venue] ?? 0) + 1
+      const info = getVenueCoordinates(g.venue)
+      if (info) {
+        const key = `${info.lat},${info.lng}`
+        if (!coordTeams[key]) coordTeams[key] = new Set()
+        if (g.homeTeam) coordTeams[key].add(g.homeTeam)
+        if (g.awayTeam) coordTeams[key].add(g.awayTeam)
+      }
+    }
   }
   const uniqueVenueNames = Object.keys(venueGameCounts)
   const mapPins: MapPin[] = []
@@ -286,7 +296,12 @@ export default function Stats() {
       const key = `${info.lat},${info.lng}`
       if (!seenPinKeys.has(key)) {
         seenPinKeys.add(key)
-        mapPins.push({ ...info, gameCount: venueGameCounts[vn] })
+        mapPins.push({
+          ...info,
+          gameCount: venueGameCounts[vn],
+          photoUrl: getVenuePhoto(info.name),
+          teams: coordTeams[key] ? [...coordTeams[key]].sort() : [],
+        })
       }
     } else {
       unmappedVenues.push(vn)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -23,8 +23,6 @@ function FitBounds({ pins }: { pins: MapPin[] }) {
 // ─── Marker icon builder ──────────────────────────────────────────────────────
 
 function makePinIcon(gameCount: number): L.DivIcon {
-  // SVG map-pin: teardrop body with white inner circle
-  // Uses CSS variable --color-red so it follows the active theme
   const badge =
     gameCount > 1
       ? `<div style="
@@ -53,6 +51,91 @@ function makePinIcon(gameCount: number): L.DivIcon {
     iconAnchor: [12, 32],
     popupAnchor: [0, -34],
   })
+}
+
+// ─── Stadium popup card ───────────────────────────────────────────────────────
+
+function StadiumPopupContent({ pin }: { pin: MapPin }) {
+  const [imgState, setImgState] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const hasPhoto = !!pin.photoUrl
+  const showPlaceholder = !hasPhoto || imgState === 'error'
+
+  return (
+    <div style={{ width: 280 }}>
+      {/* Photo area */}
+      <div style={{ height: 160, overflow: 'hidden', background: '#ede0bf', position: 'relative', flexShrink: 0 }}>
+        {hasPhoto && imgState !== 'error' && (
+          <img
+            src={pin.photoUrl!}
+            alt={pin.name}
+            loading="lazy"
+            onLoad={() => setImgState('loaded')}
+            onError={() => setImgState('error')}
+            style={{
+              width: '100%', height: '100%', objectFit: 'cover',
+              display: 'block',
+              opacity: imgState === 'loaded' ? 1 : 0,
+              transition: 'opacity 0.3s ease',
+            }}
+          />
+        )}
+        {hasPhoto && imgState === 'loading' && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              width: 24, height: 24,
+              border: '2px solid rgba(0,0,0,0.1)',
+              borderTopColor: 'rgba(0,0,0,0.4)',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+          </div>
+        )}
+        {showPlaceholder && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: '#ede0bf', gap: 6,
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+              stroke="rgba(0,0,0,0.18)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <span style={{ fontSize: 9, fontFamily: 'sans-serif', color: 'rgba(0,0,0,0.3)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+              No photo
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Info section */}
+      <div style={{ padding: '10px 12px 10px' }}>
+        <p style={{
+          fontFamily: '"Bebas Neue", sans-serif',
+          fontSize: 17, lineHeight: 1.1,
+          color: '#000', margin: 0, marginBottom: 3,
+          letterSpacing: '0.03em',
+        }}>
+          {pin.name}
+        </p>
+        <p style={{ fontFamily: '"Archivo", sans-serif', fontSize: 12, color: '#666', margin: 0, marginBottom: 5 }}>
+          {pin.city}, {pin.state}
+        </p>
+        <p style={{ fontFamily: '"Caveat", cursive', fontSize: 14, color: '#888', margin: 0 }}>
+          {pin.gameCount} {pin.gameCount === 1 ? 'game' : 'games'} logged here
+        </p>
+        {pin.teams && pin.teams.length > 0 && (
+          <p style={{ fontFamily: '"Archivo", sans-serif', fontSize: 10, color: '#bbb', margin: 0, marginTop: 3 }}>
+            {pin.teams.slice(0, 3).join(' · ')}
+          </p>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -86,12 +169,8 @@ export default function StadiumMap({ pins }: StadiumMapProps) {
       <FitBounds pins={pins} />
       {pins.map((p, i) => (
         <Marker key={`${p.name}-${p.lat}`} position={[p.lat, p.lng]} icon={icons[i]}>
-          <Popup>
-            <p className="font-bebas text-base leading-tight">{p.name}</p>
-            <p className="text-xs text-gray-500">{p.city}, {p.state}</p>
-            <p className="font-bebas text-xs text-gray-400 mt-0.5">
-              {p.gameCount} {p.gameCount === 1 ? 'game' : 'games'}
-            </p>
+          <Popup className="stadium-popup" minWidth={280} maxWidth={280} autoPan={true}>
+            <StadiumPopupContent pin={p} />
           </Popup>
         </Marker>
       ))}
