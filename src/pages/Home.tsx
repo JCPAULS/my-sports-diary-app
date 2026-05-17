@@ -3,6 +3,8 @@ import { getAllGames } from '@/lib/storage'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport, ENABLED_SPORTS } from '@/lib/sports'
 import { getAllMilestones } from '@/lib/milestones'
+import { getSettings } from '@/lib/settings'
+import { getTeam, hashTeamColor } from '@/lib/teams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
 import type { Game } from '@/types/Game'
@@ -304,6 +306,209 @@ function EmptyTimeline() {
   )
 }
 
+// ─── Team stats banner (shown when filtering by team) ─────────────────────────
+
+function teamGameSortKey(g: Game): number {
+  if (g.date) return new Date(g.date).getTime()
+  const year = parseInt(g.season ?? '2000')
+  const week = parseInt(g.week ?? '0') || 0
+  return new Date(`${year}-09-01`).getTime() + week * 7 * 24 * 60 * 60 * 1000
+}
+
+function shortLabel(g: Game): string {
+  if (g.date) {
+    const [y, m, d] = g.date.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+  if (g.week && g.season) return `${getWeekLabel(g.week)} · ${g.season}`
+  if (g.season) return g.season
+  return '—'
+}
+
+function StatCard({ label, value, sub, compact }: { label: string; value: string; sub?: string; compact?: boolean }) {
+  return (
+    <div className="bg-paper border-2 border-ink/20 px-4 py-3 flex-1 min-w-[80px]">
+      <p className="font-bebas text-[9px] tracking-[0.25em] text-ink/40 mb-0.5">{label}</p>
+      <p className={`font-bebas leading-none text-ink ${compact ? 'text-base' : 'text-2xl'}`}>{value}</p>
+      {sub && <p className="font-bebas text-[10px] tracking-[0.08em] text-ink/40 mt-0.5 truncate">{sub}</p>}
+    </div>
+  )
+}
+
+function TeamStatsBanner({ teamName, games }: { teamName: string; games: Game[] }) {
+  const sportId = games[0]?.sportId ?? 'nfl'
+  const teamEntry = getTeam(sportId, teamName)
+  const accentColor = teamEntry?.primaryColor ?? hashTeamColor(teamName)
+  const isFollowed = Object.values(getSettings().followedTeams ?? {}).some((names) => names.includes(teamName))
+
+  const sorted = [...games].sort((a, b) => teamGameSortKey(a) - teamGameSortKey(b))
+
+  let homeCount = 0, awayCount = 0
+  for (const g of games) { g.homeTeam === teamName ? homeCount++ : awayCount++ }
+
+  const venueSet = new Set(games.map((g) => g.venue).filter(Boolean))
+
+  let wins = 0, losses = 0
+  let bestWin: Game | null = null, bestWinMargin = 0
+  let worstLoss: Game | null = null, worstLossMargin = 0
+  const qualGames: Array<{ game: Game; won: boolean; margin: number }> = []
+
+  for (const g of sorted) {
+    if (g.rootingFor !== teamName || g.homeScore === undefined || g.awayScore === undefined) continue
+    const isHome = g.homeTeam === teamName
+    const teamScore = isHome ? g.homeScore : g.awayScore
+    const oppScore = isHome ? g.awayScore : g.homeScore
+    if (teamScore === oppScore) continue
+    const won = teamScore > oppScore
+    const margin = Math.abs(teamScore - oppScore)
+    qualGames.push({ game: g, won, margin })
+    if (won) {
+      wins++
+      if (margin > bestWinMargin) { bestWinMargin = margin; bestWin = g }
+    } else {
+      losses++
+      if (margin > worstLossMargin) { worstLossMargin = margin; worstLoss = g }
+    }
+  }
+
+  let streak = 0
+  let streakIsWin: boolean | null = null
+  for (let i = qualGames.length - 1; i >= 0; i--) {
+    const { won } = qualGames[i]
+    if (streakIsWin === null) { streakIsWin = won; streak = 1 }
+    else if (won === streakIsWin) streak++
+    else break
+  }
+
+  const attendeeCounts: Record<string, { displayName: string; count: number }> = {}
+  for (const g of games) {
+    for (const person of (g.attendees ?? [])) {
+      const key = person.toLowerCase().trim()
+      if (!key) continue
+      if (!attendeeCounts[key]) attendeeCounts[key] = { displayName: person.trim(), count: 0 }
+      attendeeCounts[key].count++
+    }
+  }
+  const topPeople = Object.values(attendeeCounts).sort((a, b) => b.count - a.count).slice(0, 3)
+
+  const firstGame = sorted[0]
+  const lastGame = sorted[sorted.length - 1]
+  const gameOpp = (g: Game) => g.homeTeam === teamName ? g.awayTeam : g.homeTeam
+  const scoreDisplay = (g: Game) => {
+    if (g.homeScore === undefined || g.awayScore === undefined) return ''
+    const isHome = g.homeTeam === teamName
+    const ts = isHome ? g.homeScore : g.awayScore
+    const os = isHome ? g.awayScore : g.homeScore
+    return `${ts}–${os}`
+  }
+
+  const showRecord = qualGames.length >= 1
+  const showHomeAway = games.length >= 2
+  const showLastGame = sorted.length >= 2
+  const showStreaks = qualGames.length >= 2 && streak >= 2
+  const showHighlights = qualGames.length >= 2 && (bestWin || worstLoss)
+  const showPeople = topPeople.length > 0
+
+  return (
+    <div className="mb-8 border-2 border-ink bg-paper-deep card-stamp">
+      <div style={{ background: accentColor, height: 4 }} />
+
+      {/* Header */}
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <TeamBadge team={teamName} sportId={sportId} size="lg" />
+          <div>
+            <p className="font-bebas text-4xl lg:text-5xl text-ink leading-none">{teamName}</p>
+            {isFollowed && (
+              <span className="inline-block font-bebas text-[9px] tracking-[0.2em] bg-gold text-ink px-1.5 py-0.5 mt-1">
+                MY TEAM
+              </span>
+            )}
+          </div>
+        </div>
+        <Link
+          to="/stats"
+          className="font-bebas text-xs tracking-[0.15em] text-ink/50 hover:text-ink border-b border-ink/20 hover:border-ink transition-colors flex-shrink-0 mt-1"
+        >
+          VIEW IN STATS ›
+        </Link>
+      </div>
+
+      <div className="border-t-2 border-dashed border-ink/20 mx-5" />
+
+      {/* Stat cards */}
+      <div className="px-4 py-4 flex flex-wrap gap-3">
+        <StatCard label="GAMES SEEN" value={String(games.length)} />
+        {showRecord && <StatCard label="YOUR RECORD" value={`${wins}–${losses}`} />}
+        {showHomeAway && <StatCard label="HOME / AWAY" value={`${homeCount} / ${awayCount}`} />}
+        {venueSet.size > 0 && <StatCard label="VENUES" value={String(venueSet.size)} />}
+        {firstGame && (
+          <StatCard
+            label="FIRST SEEN"
+            value={shortLabel(firstGame)}
+            sub={gameOpp(firstGame) ? `vs ${gameOpp(firstGame)}` : undefined}
+            compact
+          />
+        )}
+        {showLastGame && lastGame && (
+          <StatCard
+            label="MOST RECENT"
+            value={shortLabel(lastGame)}
+            sub={gameOpp(lastGame) ? `vs ${gameOpp(lastGame)}` : undefined}
+            compact
+          />
+        )}
+      </div>
+
+      {/* Streaks + highlights */}
+      {(showStreaks || showHighlights) && (
+        <>
+          <div className="border-t-2 border-dashed border-ink/20 mx-5" />
+          <div className="px-4 py-3 flex flex-wrap gap-x-6 gap-y-1">
+            {showStreaks && streakIsWin !== null && (
+              <span className="font-bebas text-sm tracking-[0.08em]">
+                <span className="text-ink/40">STREAK </span>
+                <span className={streakIsWin ? 'text-red' : 'text-navy'}>
+                  {streak}{streakIsWin ? 'W' : 'L'}
+                </span>
+              </span>
+            )}
+            {showHighlights && bestWin && (
+              <span className="font-bebas text-sm tracking-[0.08em]">
+                <span className="text-ink/40">BEST WIN </span>
+                <span className="text-red">{scoreDisplay(bestWin)} vs {gameOpp(bestWin)}</span>
+              </span>
+            )}
+            {showHighlights && worstLoss && (
+              <span className="font-bebas text-sm tracking-[0.08em]">
+                <span className="text-ink/40">TOUGHEST L </span>
+                <span className="text-navy">{scoreDisplay(worstLoss)} vs {gameOpp(worstLoss)}</span>
+              </span>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* People */}
+      {showPeople && (
+        <>
+          <div className="border-t-2 border-dashed border-ink/20 mx-5" />
+          <div className="px-4 py-3 flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+            <span className="font-bebas text-[10px] tracking-[0.2em] text-ink/40">MOST OFTEN WITH</span>
+            {topPeople.map((p, i) => (
+              <span key={p.displayName} className="font-caveat text-base text-ink">
+                {p.displayName}
+                <span className="font-bebas text-[10px] text-ink/30 ml-0.5">({p.count})</span>
+                {i < topPeople.length - 1 && <span className="text-ink/25 mx-0.5">·</span>}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -408,6 +613,11 @@ export default function Home() {
               ×
             </button>
           </div>
+        )}
+
+        {/* Team stats banner */}
+        {teamFilter && games.length > 0 && (
+          <TeamStatsBanner teamName={teamFilter} games={games} />
         )}
 
         {/* Attendee filter banner */}
