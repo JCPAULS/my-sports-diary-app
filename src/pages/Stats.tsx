@@ -23,6 +23,9 @@ class MapErrorBoundary extends Component<
     this.state = { error: false, key: 0 }
   }
   static getDerivedStateFromError() { return { error: true } }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[MapErrorBoundary] caught:', error, info.componentStack)
+  }
   retry = () => this.setState((s) => ({ error: false, key: s.key + 1 }))
   render() {
     if (this.state.error) {
