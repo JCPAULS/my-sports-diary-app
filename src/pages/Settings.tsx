@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import Nav from '@/components/Nav'
 import { ENABLED_SPORTS } from '@/lib/sports'
 import { getTeamsBySport, getTeam } from '@/lib/teams'
-import { getSettings, saveSettings, applyTheme, type AppSettings } from '@/lib/settings'
+import { getSettings, applyTheme, type AppSettings } from '@/lib/settings'
+import * as settingsStore from '@/lib/settingsStore'
+import { getAllGames } from '@/lib/storage'
+import { useMigration } from '@/lib/MigrationContext'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -20,8 +23,19 @@ function SectionHeader({ title }: { title: string }) {
 
 export default function Settings() {
   const navigate = useNavigate()
+  const { triggerMigration } = useMigration()
   const [settings, setSettings] = useState<AppSettings>(getSettings)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const hasLocalGames = getAllGames().length > 0
+
+  // Load latest settings from Supabase on mount
+  useEffect(() => {
+    settingsStore.getSettings().then((s) => {
+      setSettings(s)
+      applyTheme(s)
+    }).catch(() => {})
+  }, [])
 
   // Live preview: apply theme as user tweaks it, revert on unmount if not saved
   useEffect(() => {
@@ -63,10 +77,12 @@ export default function Settings() {
     }))
   }
 
-  function handleSave() {
-    saveSettings(settings)
+  async function handleSave() {
+    setSaving(true)
+    await settingsStore.saveSettings(settings)
     applyTheme(settings)
     setSaved(true)
+    setSaving(false)
     setTimeout(() => setSaved(false), 1500)
   }
 
@@ -239,14 +255,32 @@ export default function Settings() {
           )}
         </div>
 
+        {/* ── RESTORE DEVICE GAMES ── */}
+        {hasLocalGames && (
+          <div>
+            <SectionHeader title="DATA" />
+            <p className="font-caveat text-base text-ink/50 mb-4">
+              You have games saved on this device. Back them up to your account to access them anywhere.
+            </p>
+            <button
+              type="button"
+              onClick={triggerMigration}
+              className="font-bebas text-lg tracking-[0.15em] bg-paper border-2 border-ink text-ink px-6 py-2.5 hover:bg-paper-deep transition-colors"
+            >
+              RESTORE DEVICE GAMES
+            </button>
+          </div>
+        )}
+
         {/* ── SAVE ── */}
         <div className="flex items-center gap-4 pt-2 border-t-2 border-ink/10">
           <button
             type="button"
             onClick={handleSave}
-            className="font-bebas text-2xl tracking-[0.15em] bg-ink text-gold border-2 border-ink px-8 py-3 btn-press"
+            disabled={saving}
+            className="font-bebas text-2xl tracking-[0.15em] bg-ink text-gold border-2 border-ink px-8 py-3 btn-press disabled:opacity-50"
           >
-            {saved ? 'SAVED ✓' : 'SAVE SETTINGS'}
+            {saving ? 'SAVING…' : saved ? 'SAVED ✓' : 'SAVE SETTINGS'}
           </button>
           <button
             type="button"

@@ -69,6 +69,7 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<DbGame, 'id' | 'user_id' | 'created_at'>>
+        Relationships: []
       }
       user_settings: {
         Row: DbUserSettings
@@ -77,11 +78,13 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<DbUserSettings, 'user_id' | 'created_at'>>
+        Relationships: []
       }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
     Enums: Record<string, never>
+    CompositeTypes: Record<string, never>
   }
 }
 

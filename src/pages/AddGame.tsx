@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { saveGame, updateGame, getAllGames } from '@/lib/storage'
+import { saveGame, updateGame, getAllGames } from '@/lib/gameStore'
+import { useAuth } from '@/lib/AuthContext'
 import { fetchTeams, fetchTeamSchedule, fetchGameSummary, fetchGameOnDate } from '@/lib/sportsApi'
 import { readPhotoMeta } from '@/lib/photoMeta'
 import { findVenueByCoords, getVenueSportHint } from '@/lib/venues'
@@ -9,6 +10,7 @@ import { ENABLED_SPORTS, getSport, CUSTOM_LEVELS, COLLEGE_SPORT_TYPES } from '@/
 import { getTeamsBySport } from '@/lib/teams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
+import PhotoImg from '@/components/PhotoImg'
 import type { Game, GameResult, Team } from '@/types/Game'
 import { detectNewMilestones, markMilestonesSeen, type Milestone } from '@/lib/milestones'
 import { getSettings } from '@/lib/settings'
@@ -231,6 +233,7 @@ async function compressImage(file: File): Promise<string> {
 
 export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const basicsRef = useRef<HTMLDivElement>(null)
   const [newMilestones, setNewMilestones] = useState<Milestone[]>([])
   const isEditMode = !!initialGame
@@ -271,15 +274,19 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     level: '', collegeSportType: '',
   })
 
-  // Existing attendees from diary — seeded once at mount for autocomplete
-  const [existingAttendees] = useState<string[]>(() => {
-    const names = new Set<string>()
-    getAllGames().forEach((g) => g.attendees?.forEach((n) => names.add(n)))
-    return [...names].sort()
-  })
+  // Existing attendees from diary — loaded async for autocomplete
+  const [existingAttendees, setExistingAttendees] = useState<string[]>([])
+  useEffect(() => {
+    getAllGames().then((gs) => {
+      const names = new Set<string>()
+      gs.forEach((g) => g.attendees?.forEach((n) => names.add(n)))
+      setExistingAttendees([...names].sort())
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [photos, setPhotos] = useState<string[]>(initialGame?.photos ?? [])
   const [outfitPhoto, setOutfitPhoto] = useState<string | null>(initialGame?.outfitPhoto ?? null)
   const [processingCount, setProcessingCount] = useState(0)
+  const [saving, setSaving] = useState(false)
   const [storageWarn, setStorageWarn] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showLittleThings, setShowLittleThings] = useState(true)
@@ -649,9 +656,10 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
 
   function removePhoto(idx: number) { setPhotos((prev) => prev.filter((_, i) => i !== idx)) }
 
-  function commitSave() {
+  async function commitSave() {
     setSaveError(null)
     setStorageWarn(false)
+    setSaving(true)
     const finalPhotos = findPhoto.compressedData
       ? [findPhoto.compressedData, ...photos].slice(0, MAX_PHOTOS)
       : photos
@@ -708,53 +716,49 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       createdAt: initialGame?.createdAt ?? new Date().toISOString(),
     }
 
-    if (isEditMode) {
-      try {
-        updateGame(game)
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'QuotaExceededError') {
-          setSaveError("Your device's storage is full and the game couldn't be saved. Try removing a photo from this game, or delete some older games.")
-        } else {
-          setSaveError("Something went wrong saving your game. Please try again.")
-        }
+    try {
+      if (isEditMode) {
+        await updateGame(game)
+        navigate(`/game/${initialGame!.id}`)
         return
       }
-      navigate(`/game/${initialGame!.id}`)
-      return
-    }
 
-    const gamesBefore = getAllGames()
-    try {
-      saveGame(game)
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'QuotaExceededError') {
-        setSaveError("Your device's storage is full and the game couldn't be saved. Try removing a photo from this game, or delete some older games.")
+      const gamesBefore = await getAllGames()
+      const savedGame = await saveGame(game)
+      const gamesAfter = [...gamesBefore, savedGame]
+      const fresh = detectNewMilestones(gamesBefore, gamesAfter)
+      if (fresh.length > 0) {
+        setNewMilestones(fresh)
       } else {
-        setSaveError("Something went wrong saving your game. Please try again.")
+        navigate('/')
       }
-      return
-    }
-    const fresh = detectNewMilestones(gamesBefore, getAllGames())
-    if (fresh.length > 0) {
-      setNewMilestones(fresh)
-    } else {
-      navigate('/')
+    } catch (err) {
+      setSaveError(
+        err instanceof DOMException && err.name === 'QuotaExceededError'
+          ? "Your device's storage is full. Try removing a photo from this game, or delete some older games."
+          : "Something went wrong saving your game. Please try again."
+      )
+    } finally {
+      setSaving(false)
     }
   }
 
   function handleSave() {
     if ((needsWeek && !form.week) || !form.homeTeam.trim() || !form.awayTeam.trim()) return
     if (isCustom && !form.date) return
-    const allPhotos = [
-      ...(findPhoto.compressedData ? [findPhoto.compressedData] : []),
-      ...photos,
-      ...(outfitPhoto ? [outfitPhoto] : []),
-    ]
-    if (allPhotos.length > 0) {
-      const newChars = allPhotos.reduce((sum, p) => sum + p.length, 0)
-      if ((localStorage.getItem('sports-diary-games') ?? '').length + newChars > STORAGE_WARN_CHARS) {
-        setStorageWarn(true)
-        return
+    // Storage warning only applies to local-only (signed-out) users
+    if (!user) {
+      const allPhotos = [
+        ...(findPhoto.compressedData ? [findPhoto.compressedData] : []),
+        ...photos,
+        ...(outfitPhoto ? [outfitPhoto] : []),
+      ]
+      if (allPhotos.length > 0) {
+        const newChars = allPhotos.reduce((sum, p) => sum + p.length, 0)
+        if ((localStorage.getItem('sports-diary-games') ?? '').length + newChars > STORAGE_WARN_CHARS) {
+          setStorageWarn(true)
+          return
+        }
       }
     }
     commitSave()
@@ -762,7 +766,8 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
 
   const canSave = (!needsWeek || form.week) &&
     form.homeTeam.trim() && form.awayTeam.trim() &&
-    (!isCustom || form.date)
+    (!isCustom || form.date) &&
+    !saving
 
   const teamNames = teams.map((t) => t.name)
   const seasonGroups = groupResultsBySeason(filteredResults)
@@ -1371,7 +1376,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
                     <div className="flex-shrink-0">
                       {outfitPhoto ? (
                         <div className="relative w-[46px] h-[46px] border-2 border-ink shadow-[2px_2px_0_#000]">
-                          <img src={outfitPhoto} alt="Outfit" className="w-full h-full object-cover" />
+                          <PhotoImg src={outfitPhoto} alt="Outfit" className="w-full h-full object-cover" />
                           <button type="button" onClick={() => setOutfitPhoto(null)}
                             className="absolute -top-2 -right-2 w-5 h-5 bg-red border-2 border-ink text-white font-bebas text-xs flex items-center justify-center leading-none hover:bg-red-deep transition-colors"
                             aria-label="Remove outfit photo">×</button>
@@ -1443,7 +1448,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
             <div className="flex flex-wrap gap-3 mt-5">
               {photos.map((photo, i) => (
                 <div key={i} className="relative w-24 h-24 border-2 border-ink shadow-[3px_3px_0_#000]">
-                  <img src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                  <PhotoImg src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
                   <button type="button" onClick={() => removePhoto(i)}
                     className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red border-2 border-ink text-white font-bebas text-base flex items-center justify-center leading-none hover:bg-red-deep transition-colors"
                     aria-label="Remove photo">×</button>
@@ -1451,8 +1456,8 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
               ))}
             </div>
           )}
-          {/* Storage usage indicator */}
-          {(photos.length > 0 || outfitPhoto || findPhoto.compressedData) && (() => {
+          {/* Storage usage indicator — only for signed-out users */}
+          {!user && (photos.length > 0 || outfitPhoto || findPhoto.compressedData) && (() => {
             const outfitLen = outfitPhoto?.length ?? 0
             const findLen = findPhoto.compressedData?.length ?? 0
             const usedMB = ((localStorage.getItem('sports-diary-games') ?? '').length + photos.reduce((s, p) => s + p.length, 0) + outfitLen + findLen) / (1024 * 1024)
@@ -1470,8 +1475,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
           <div className="mb-6 border-2 border-gold bg-paper-deep p-4">
             <p className="font-bebas text-sm tracking-[0.1em] text-ink mb-1">RUNNING LOW ON STORAGE</p>
             <p className="font-caveat text-base text-ink/70 mb-4 leading-snug">
-              You're using a lot of storage. Consider removing a photo from this game, or your photos may not save.<br />
-              <span className="text-ink/40 text-sm">(Full photo storage coming when we add accounts.)</span>
+              You're using a lot of local storage. Consider removing a photo from this game, or create an account to save photos to the cloud.
             </p>
             <div className="flex gap-3">
               <button type="button" onClick={commitSave}
@@ -1499,7 +1503,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
         <div className="flex gap-3">
           <button onClick={handleSave} disabled={!canSave || processingCount > 0}
             className="flex-1 font-bebas text-2xl tracking-[0.15em] bg-red text-white border-2 border-ink py-4 btn-press disabled:opacity-40 disabled:cursor-not-allowed">
-            {isEditMode ? 'Save Changes' : 'Save Game'}
+            {saving ? 'SAVING…' : isEditMode ? 'Save Changes' : 'Save Game'}
           </button>
           <button onClick={() => navigate(isEditMode ? `/game/${initialGame!.id}` : '/')}
             className="font-bebas text-2xl tracking-[0.15em] text-ink border-2 border-ink px-6 py-4 hover:bg-paper-deep transition-colors">

@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom'
-import { getAllGames } from '@/lib/storage'
+import { useGames } from '@/lib/useGames'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport, ENABLED_SPORTS } from '@/lib/sports'
 import { getAllMilestones } from '@/lib/milestones'
@@ -7,6 +7,7 @@ import { getSettings } from '@/lib/settings'
 import { getTeam, hashTeamColor } from '@/lib/teams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
+import PhotoImg from '@/components/PhotoImg'
 import type { Game } from '@/types/Game'
 
 // Shared gutter width — keeps the timeline line position consistent
@@ -115,7 +116,7 @@ function GameCard({ game, cardIdx }: { game: Game; cardIdx: number }) {
     >
       {firstPhoto && (
         <div className="absolute top-3 right-3 w-16 h-16 border-2 border-white overflow-hidden shadow-[2px_2px_0_rgba(0,0,0,0.3)] z-10 rotate-2">
-          <img src={firstPhoto} alt="" className="w-full h-full object-cover" />
+          <PhotoImg src={firstPhoto} alt="" className="w-full h-full object-cover" />
         </div>
       )}
       <div className={firstPhoto ? 'p-5 pr-20' : 'p-5'}>
@@ -516,7 +517,22 @@ export default function Home() {
   const teamFilter     = searchParams.get('team')
   const attendeeFilter = searchParams.get('attendee')
 
-  const allGames = getAllGames()
+  const { games: allGames, loading } = useGames()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-paper">
+        <Nav />
+        <div className="flex items-center justify-center min-h-[80vh]">
+          <div
+            className="w-8 h-8 border-[3px] border-ink/15 border-t-ink rounded-full"
+            style={{ animation: 'spin 0.65s linear infinite' }}
+          />
+        </div>
+      </div>
+    )
+  }
+
   const games = teamFilter
     ? allGames.filter((g) => g.homeTeam === teamFilter || g.awayTeam === teamFilter)
     : attendeeFilter

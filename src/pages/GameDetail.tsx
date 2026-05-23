@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { getAllGames, deleteGame } from '@/lib/storage'
+import { deleteGame } from '@/lib/gameStore'
+import { useGame } from '@/lib/useGame'
 import { getWeekLabel } from '@/lib/nflTeams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
+import PhotoImg from '@/components/PhotoImg'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,22 +45,36 @@ export default function GameDetail() {
   const navigate = useNavigate()
   const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null)
 
-  const game = getAllGames().find((g) => g.id === id)
+  const { game, loading } = useGame(id)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-paper">
+        <Nav />
+        <div className="flex items-center justify-center min-h-[80vh]">
+          <div
+            className="w-8 h-8 border-[3px] border-ink/15 border-t-ink rounded-full"
+            style={{ animation: 'spin 0.65s linear infinite' }}
+          />
+        </div>
+      </div>
+    )
+  }
 
   if (!game) {
     return (
       <div className="min-h-screen bg-paper">
         <Nav />
         <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="text-center">
-          <p className="font-bebas text-2xl text-ink/40">Game not found</p>
-          <button
-            onClick={() => navigate('/')}
-            className="font-caveat text-lg text-navy underline mt-3 block"
-          >
-            ← Back to timeline
-          </button>
-        </div>
+          <div className="text-center">
+            <p className="font-bebas text-2xl text-ink/40">Game not found</p>
+            <button
+              onClick={() => navigate('/')}
+              className="font-caveat text-lg text-navy underline mt-3 block"
+            >
+              ← Back to timeline
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -68,9 +84,9 @@ export default function GameDetail() {
   const hasLittleThings = !!(game.whatYouWore || game.whatYouAte || game.whoDrove || game.pregameRitual || game.outfitPhoto)
   const hasRightContent = !!(game.photos?.length || game.notes || game.vibe || game.mvp || game.whoWasThere || hasLittleThings || game.summary)
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!window.confirm('Delete this game entry?')) return
-    deleteGame(game!.id)
+    await deleteGame(game!.id)
     navigate('/')
   }
 
@@ -89,7 +105,7 @@ export default function GameDetail() {
           >
             ✕
           </button>
-          <img
+          <PhotoImg
             src={lightboxPhoto}
             alt="Full size"
             className="max-w-full max-h-[90vh] object-contain border-2 border-white/20"
@@ -207,7 +223,7 @@ export default function GameDetail() {
                       onClick={() => setLightboxPhoto(photo)}
                       className="flex-shrink-0 w-28 h-28 lg:w-32 lg:h-32 border-2 border-ink shadow-[3px_3px_0_#000] overflow-hidden hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#000] transition-all"
                     >
-                      <img src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                      <PhotoImg src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>
@@ -273,7 +289,7 @@ export default function GameDetail() {
                           onClick={() => setLightboxPhoto(game.outfitPhoto!)}
                           className="flex-shrink-0 border-2 border-ink p-1 bg-white shadow-[2px_2px_0_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] transition-all"
                         >
-                          <img src={game.outfitPhoto} alt="Outfit" className="w-20 h-20 object-cover" />
+                          <PhotoImg src={game.outfitPhoto!} alt="Outfit" className="w-20 h-20 object-cover" />
                         </button>
                       )}
                     </div>

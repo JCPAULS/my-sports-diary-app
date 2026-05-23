@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from '@/lib/AuthContext'
+import { MigrationProvider } from '@/lib/MigrationContext'
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute'
+import MigrationModal from '@/components/MigrationModal'
 import Home from '@/pages/Home'
 import AddGame from '@/pages/AddGame'
 import EditGame from '@/pages/EditGame'
@@ -19,8 +21,10 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <MigrationProvider>
+        <BrowserRouter>
+          <MigrationModal />
+          <Routes>
           {/* Public-only routes — redirect to / if already signed in */}
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignUp /></PublicRoute>} />
@@ -36,8 +40,9 @@ export default function App() {
           <Route path="/game/:id" element={<ProtectedRoute><GameDetail /></ProtectedRoute>} />
           <Route path="/game/:id/edit" element={<ProtectedRoute><EditGame /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+        </BrowserRouter>
+      </MigrationProvider>
     </AuthProvider>
   )
 }

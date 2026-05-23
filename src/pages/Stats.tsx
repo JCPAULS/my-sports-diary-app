@@ -1,6 +1,6 @@
 import { lazy, Suspense, Component, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getAllGames } from '@/lib/storage'
+import { useGames } from '@/lib/useGames'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport } from '@/lib/sports'
 import { getAllMilestones, type Milestone } from '@/lib/milestones'
@@ -223,7 +223,7 @@ const MILESTONE_CATEGORIES: { id: Milestone['category']; label: string }[] = [
 
 export default function Stats() {
   const navigate = useNavigate()
-  const games = getAllGames()
+  const { games, loading } = useGames()
 
   const header = (
     <header className="bg-hero-blue border-b-4 border-ink">
@@ -235,6 +235,21 @@ export default function Stats() {
       </div>
     </header>
   )
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-paper">
+        <Nav />
+        {header}
+        <main className="max-w-7xl mx-auto px-4 lg:px-8 py-20 flex justify-center">
+          <div
+            className="w-8 h-8 border-[3px] border-ink/15 border-t-ink rounded-full"
+            style={{ animation: 'spin 0.65s linear infinite' }}
+          />
+        </main>
+      </div>
+    )
+  }
 
   if (games.length === 0) {
     return (
