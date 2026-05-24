@@ -2,10 +2,9 @@ import { lazy, Suspense, Component, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useGames } from '@/lib/useGames'
 import { getWeekLabel } from '@/lib/nflTeams'
-import { getSport } from '@/lib/sports'
+import { getSport, ENABLED_SPORTS } from '@/lib/sports'
 import { getAllMilestones, type Milestone } from '@/lib/milestones'
 import { getVenueCoordinates, getVenuePhoto, type MapPin } from '@/lib/venues'
-import { ENABLED_SPORTS } from '@/lib/sports'
 import { getSettings } from '@/lib/settings'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
@@ -628,7 +627,7 @@ export default function Stats() {
             )}
 
             {mapPins.length > 0 ? (
-              <MapErrorBoundary key={effectiveMapSportFilter}>
+              <MapErrorBoundary>
                 <Suspense fallback={
                   <div className="w-full h-64 lg:h-80 border-2 border-ink bg-paper-deep flex items-center justify-center">
                     <p className="font-bebas text-xl text-ink/40 tracking-[0.2em]">LOADING MAP…</p>

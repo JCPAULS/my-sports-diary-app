@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useGames } from '@/lib/useGames'
 import { getWeekLabel } from '@/lib/nflTeams'
@@ -515,12 +516,26 @@ function TeamStatsBanner({ teamName, games }: { teamName: string; games: Game[] 
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
+// ─── Filter input styles ──────────────────────────────────────────────────────
+
+const filterInputCls = 'w-full bg-white border-2 border-ink px-3 py-2 font-archivo text-sm text-ink placeholder-ink/30 focus:outline-none focus:border-red transition-colors'
+const filterSelectCls = `${filterInputCls} cursor-pointer`
+
+// ─── Home ─────────────────────────────────────────────────────────────────────
+
 export default function Home() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const teamFilter     = searchParams.get('team')
   const attendeeFilter = searchParams.get('attendee')
 
   const { games: allGames, loading } = useGames()
+
+  // Filter panel state — not persisted except team initialised from URL ?team=X
+  const [filtersOpen, setFiltersOpen] = useState(() => !!searchParams.get('team'))
+  const [filterYear, setFilterYear] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [filterSport, setFilterSport] = useState('')
+  const [filterTeam, setFilterTeam] = useState(() => searchParams.get('team') ?? '')
 
   if (loading) {
     return (
@@ -536,14 +551,42 @@ export default function Home() {
     )
   }
 
-  const games = teamFilter
-    ? allGames.filter((g) => g.homeTeam === teamFilter || g.awayTeam === teamFilter)
-    : attendeeFilter
-    ? allGames.filter((g) => {
-        const lc = attendeeFilter.toLowerCase()
-        return g.attendees?.some((a) => a.toLowerCase() === lc)
-      })
-    : allGames
+  // Derived values for filter dropdowns (from all games)
+  const availableYears = [...new Set(
+    allGames.map((g) => g.season ?? g.date?.slice(0, 4)).filter(Boolean) as string[]
+  )].sort().reverse()
+  const sportsInGames = [...new Set(allGames.map((g) => g.sportId ?? 'nfl'))]
+  const availableTeams = [...new Set(
+    allGames.flatMap((g) => [g.homeTeam, g.awayTeam].filter(Boolean))
+  )].sort()
+
+  // Only apply team filter if the typed value is a real team in this diary
+  const validFilterTeam = availableTeams.includes(filterTeam) ? filterTeam : ''
+
+  const hasDateFilter = !!(filterDateFrom || filterDateTo)
+  const activeFilterCount = [filterYear, hasDateFilter, filterSport, validFilterTeam].filter(Boolean).length
+  const hasActiveFilter = activeFilterCount > 0
+
+  function clearFilters() {
+    setFilterYear(''); setFilterDateFrom(''); setFilterDateTo('')
+    setFilterSport(''); setFilterTeam(''); setSearchParams({})
+  }
+
+  const games = allGames.filter((g) => {
+    if (attendeeFilter) {
+      const lc = attendeeFilter.toLowerCase()
+      if (!g.attendees?.some((a) => a.toLowerCase() === lc)) return false
+    }
+    if (filterYear) {
+      const gameSeason = g.season ?? g.date?.slice(0, 4)
+      if (gameSeason !== filterYear) return false
+    }
+    if (filterDateFrom && (!g.date || g.date < filterDateFrom)) return false
+    if (filterDateTo && (!g.date || g.date > filterDateTo)) return false
+    if (filterSport && (g.sportId ?? 'nfl') !== filterSport) return false
+    if (validFilterTeam && g.homeTeam !== validFilterTeam && g.awayTeam !== validFilterTeam) return false
+    return true
+  })
 
   const seasonGroups = groupGames(games)
   const stats = computeStats(allGames)
@@ -613,30 +656,114 @@ export default function Home() {
       {/* ── Main ── */}
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
 
+        {/* ── FILTERS button ── */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className={`font-bebas text-sm tracking-[0.15em] border-2 border-ink px-4 py-2 flex items-center gap-2 transition-colors ${
+              filtersOpen ? 'bg-ink text-gold' : 'bg-paper text-ink hover:bg-paper-deep'
+            }`}
+          >
+            FILTERS
+            {hasActiveFilter && <span className="w-2 h-2 rounded-full bg-red flex-shrink-0" />}
+          </button>
+          {hasActiveFilter && (
+            <span className="font-bebas text-xs tracking-[0.15em] text-red">
+              {activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'} active
+            </span>
+          )}
+        </div>
+
+        {/* ── Filter panel ── */}
+        {filtersOpen && (
+          <div className="mb-6 border-2 border-ink bg-paper-deep p-5 shadow-[4px_4px_0_#000]">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+
+              {/* Year */}
+              <div>
+                <label className="font-bebas text-[10px] tracking-[0.25em] text-ink/50 block mb-1.5">YEAR</label>
+                <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className={filterSelectCls}>
+                  <option value="">All Years</option>
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              {/* Date from */}
+              <div>
+                <label className="font-bebas text-[10px] tracking-[0.25em] text-ink/50 block mb-1.5">FROM</label>
+                <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className={filterInputCls} />
+              </div>
+
+              {/* Date to */}
+              <div>
+                <label className="font-bebas text-[10px] tracking-[0.25em] text-ink/50 block mb-1.5">TO</label>
+                <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className={filterInputCls} />
+              </div>
+
+              {/* Team combobox */}
+              <div>
+                <label className="font-bebas text-[10px] tracking-[0.25em] text-ink/50 block mb-1.5">TEAM</label>
+                <input
+                  type="text"
+                  list="home-filter-team-list"
+                  value={filterTeam}
+                  onChange={(e) => setFilterTeam(e.target.value)}
+                  placeholder="All Teams"
+                  className={filterInputCls}
+                />
+                <datalist id="home-filter-team-list">
+                  {availableTeams.map((t) => <option key={t} value={t} />)}
+                </datalist>
+              </div>
+            </div>
+
+            {/* Sport buttons (only when 2+ sports) */}
+            {sportsInGames.length > 1 && (
+              <div className="mb-4">
+                <label className="font-bebas text-[10px] tracking-[0.25em] text-ink/50 block mb-1.5">SPORT</label>
+                <div className="flex flex-wrap gap-2">
+                  {(['', ...sportsInGames]).map((sid) => {
+                    const label = sid === '' ? 'ALL' : (ENABLED_SPORTS.find((s) => s.id === sid)?.label ?? sid.toUpperCase())
+                    const active = filterSport === sid
+                    return (
+                      <button
+                        key={sid}
+                        type="button"
+                        onClick={() => setFilterSport(sid)}
+                        className={`font-bebas text-sm tracking-[0.15em] px-3 py-1.5 border-2 border-ink transition-all ${
+                          active ? 'bg-red text-white shadow-[2px_2px_0_#000]' : 'bg-paper text-ink/60 hover:text-ink hover:bg-paper-deep'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end border-t border-ink/10 pt-3">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="font-bebas text-sm tracking-[0.15em] text-ink/50 border border-ink/30 px-4 py-1.5 hover:text-ink hover:border-ink transition-colors"
+              >
+                CLEAR FILTERS
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end mb-6 lg:hidden">
           <Link to="/add" className="font-bebas text-xl tracking-[0.15em] bg-red text-white border-2 border-ink px-6 py-3 btn-press">
             + Add Game
           </Link>
         </div>
 
-        {/* Team filter banner */}
-        {teamFilter && (
-          <div className="flex items-center gap-3 mb-6 bg-ink text-white px-4 py-2.5 border-2 border-ink shadow-[3px_3px_0_var(--color-red)]">
-            <TeamBadge team={teamFilter} size="xs" sportId="nfl" />
-            <span className="font-bebas text-sm tracking-[0.2em] flex-1">FILTERED: {teamFilter}</span>
-            <button
-              onClick={() => setSearchParams({})}
-              className="font-bebas text-xl text-red leading-none hover:text-gold transition-colors"
-              aria-label="Clear filter"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
         {/* Team stats banner */}
-        {teamFilter && games.length > 0 && (
-          <TeamStatsBanner teamName={teamFilter} games={games} />
+        {validFilterTeam && games.length > 0 && (
+          <TeamStatsBanner teamName={validFilterTeam} games={games} />
         )}
 
         {/* Attendee filter banner */}
@@ -654,7 +781,7 @@ export default function Home() {
         )}
 
         {/* Next milestone strip — only when no active filter */}
-        {nextMilestone && !teamFilter && !attendeeFilter && (
+        {nextMilestone && !hasActiveFilter && !attendeeFilter && (
           <Link
             to="/stats"
             className="flex items-center gap-3 mb-6 bg-paper-deep border-2 border-ink/20 px-4 py-3 hover:border-ink transition-colors"
@@ -674,12 +801,25 @@ export default function Home() {
           </Link>
         )}
 
-        {(teamFilter || attendeeFilter) && games.length === 0 ? (
+        {(hasActiveFilter || attendeeFilter) && games.length === 0 ? (
           <div className="py-16 text-center">
-            <p className="font-caveat text-xl text-ink/40">
-              {teamFilter ? `No logged games with ${teamFilter} yet.` : `No logged games with ${attendeeFilter} yet.`}
-            </p>
-            <Link to="/" className="font-caveat text-base text-navy underline mt-2 block">← Show all games</Link>
+            {hasActiveFilter ? (
+              <>
+                <p className="font-caveat text-xl text-ink/40">No games match those filters. Try widening your search.</p>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="font-caveat text-base text-navy underline mt-2 block mx-auto"
+                >
+                  Clear all filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="font-caveat text-xl text-ink/40">No logged games with {attendeeFilter} yet.</p>
+                <Link to="/" className="font-caveat text-base text-navy underline mt-2 block">← Show all games</Link>
+              </>
+            )}
           </div>
         ) : allGames.length === 0 ? <EmptyTimeline /> : (
           <div className="relative">
