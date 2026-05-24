@@ -539,8 +539,8 @@ export default function Stats() {
                 <span className="font-bebas text-xs tracking-[0.2em] text-gold/70">YOUR RECORD</span>
                 <span className="font-bebas text-4xl leading-none">
                   <span className="text-red">{userRecord.wins}</span>
-                  <span className="text-gold/60">–{userRecord.losses}</span>
-                  {userRecord.ties > 0 && <span className="text-gold/60">–{userRecord.ties}</span>}
+                  <span className="text-gold">–{userRecord.losses}</span>
+                  {userRecord.ties > 0 && <span className="text-gold">–{userRecord.ties}</span>}
                 </span>
               </div>
             )}
@@ -563,10 +563,10 @@ export default function Stats() {
                     <>
                       <div className="font-bebas text-lg leading-none mt-1">
                         <span className="text-red">{ps.wins}</span>
-                        <span className="text-ink/40">–{ps.losses}</span>
-                        {ps.ties > 0 && <span className="text-ink/40">–{ps.ties}</span>}
+                        <span className="text-ink/70">–{ps.losses}</span>
+                        {ps.ties > 0 && <span className="text-ink/70">–{ps.ties}</span>}
                       </div>
-                      <p className="font-bebas text-[9px] tracking-[0.1em] text-ink/30">record when here</p>
+                      <p className="font-bebas text-[9px] tracking-[0.1em] text-ink/50">record when here</p>
                     </>
                   )}
                 </button>

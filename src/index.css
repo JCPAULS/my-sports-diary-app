@@ -112,7 +112,7 @@
 }
 
 .stadium-popup .leaflet-popup-close-button:hover {
-  color: #c8312b;
+  color: var(--color-red);
   background: rgba(250,242,221,1);
 }
 
