@@ -123,6 +123,9 @@ function GameCard({ game, cardIdx }: { game: Game; cardIdx: number }) {
         {showSportChip && sportChip && (
           <p className="font-bebas text-[9px] tracking-[0.25em] text-ink/30 mb-0.5">{sportChip}</p>
         )}
+        {game.nickname && (
+          <p className="font-caveat text-base text-navy mb-0.5 leading-tight">{game.nickname}</p>
+        )}
         <p className="font-bebas text-xs tracking-[0.2em] text-ink/50 mb-1">
           {gameLabel(game)}
         </p>

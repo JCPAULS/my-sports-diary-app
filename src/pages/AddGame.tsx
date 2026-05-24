@@ -41,6 +41,7 @@ interface FormState {
   pregameRitual: string
   level: string          // custom sport only
   collegeSportType: string  // college sport only
+  nickname: string
 }
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
@@ -197,6 +198,8 @@ function AttendeeInput({ value, onChange, existingAttendees }: {
 
 const MAX_PHOTOS = 10
 const STORAGE_WARN_CHARS = 4 * 1024 * 1024  // warn at ~4 MB used
+const DRAFT_KEY = 'sports-diary-draft-game'
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000  // 7 days
 
 const COMPRESS_MAX_DIM = 1600
 const COMPRESS_QUALITY = 0.75
@@ -265,13 +268,14 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     pregameRitual: initialGame.pregameRitual ?? '',
     level: initialGame.level ?? '',
     collegeSportType: initialGame.collegeSportType ?? '',
+    nickname: initialGame.nickname ?? '',
   } : {
     sport: defaultSport, week: '', year: defaultSeason, date: '',
     homeTeam: '', awayTeam: '', homeScore: '', awayScore: '',
     venue: '', section: '', row: '', seatNumbers: '',
     notes: '', whoWasThere: '', mvp: '', vibe: '', rootingFor: '',
     whatYouWore: '', whatYouAte: '', whoDrove: '', pregameRitual: '',
-    level: '', collegeSportType: '',
+    level: '', collegeSportType: '', nickname: '',
   })
 
   // Existing attendees from diary — loaded async for autocomplete
@@ -283,10 +287,58 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       setExistingAttendees([...names].sort())
     }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Draft auto-save (add mode only)
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (isEditMode) return
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { form: FormState; savedAt: number }
+        if (Date.now() - parsed.savedAt < DRAFT_TTL_MS) {
+          setShowDraftBanner(true)
+        } else {
+          localStorage.removeItem(DRAFT_KEY)
+        }
+      }
+    } catch { localStorage.removeItem(DRAFT_KEY) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (isEditMode) return
+    const hasInput = Object.values(form).some((v) => v !== '' && v !== defaultSport && v !== defaultSeason)
+    if (!hasInput) return
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, savedAt: Date.now() })) } catch { /* ignore */ }
+    }, 2500)
+    return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current) }
+  }, [form]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function clearDraft() { localStorage.removeItem(DRAFT_KEY) }
+
+  function resumeDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { form: FormState; savedAt: number }
+        setForm(parsed.form)
+      }
+    } catch { /* ignore */ }
+    setShowDraftBanner(false)
+  }
+
+  function discardDraft() {
+    clearDraft()
+    setShowDraftBanner(false)
+  }
+
   const [photos, setPhotos] = useState<string[]>(initialGame?.photos ?? [])
   const [outfitPhoto, setOutfitPhoto] = useState<string | null>(initialGame?.outfitPhoto ?? null)
   const [processingCount, setProcessingCount] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
   const [storageWarn, setStorageWarn] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showLittleThings, setShowLittleThings] = useState(true)
@@ -713,6 +765,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       photos: finalPhotos.length > 0 ? finalPhotos : undefined,
       outfitPhoto: outfitPhoto ?? undefined,
       summary: appliedSummary ?? undefined,
+      nickname: form.nickname.trim() || undefined,
       createdAt: initialGame?.createdAt ?? new Date().toISOString(),
     }
 
@@ -723,6 +776,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
         return
       }
 
+      clearDraft()
       const gamesBefore = await getAllGames()
       const savedGame = await saveGame(game)
       const gamesAfter = [...gamesBefore, savedGame]
@@ -837,6 +891,32 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
             {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}
           </div>
         </div>
+
+        {/* ── DRAFT RECOVERY BANNER ── */}
+        {showDraftBanner && (
+          <div className="mb-6 border-2 border-ink bg-paper-deep px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 animate-fade-slide-up">
+            <div className="flex-1">
+              <p className="font-bebas text-base tracking-[0.15em] text-ink">YOU HAVE AN UNSAVED DRAFT</p>
+              <p className="font-caveat text-sm text-ink/50">Pick up where you left off, or start fresh.</p>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={resumeDraft}
+                className="font-bebas text-sm tracking-[0.15em] bg-ink text-gold border-2 border-ink px-4 py-2 btn-press"
+              >
+                RESUME DRAFT
+              </button>
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="font-bebas text-sm tracking-[0.15em] text-ink border-2 border-ink px-4 py-2 hover:bg-paper transition-colors"
+              >
+                DISCARD
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── FIND YOUR GAME — hidden for Custom sport and in edit mode ── */}
         {!isCustom && !isEditMode && (
@@ -1169,6 +1249,17 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
             </div>
           </div>
         )}
+
+        {/* ── NICKNAME ── */}
+        <div className="mb-8">
+          <input
+            type="text"
+            value={form.nickname}
+            onChange={(e) => set('nickname', e.target.value.slice(0, 60))}
+            placeholder="Give this game a nickname… (optional)"
+            className="w-full bg-transparent border-b-2 border-ink/20 focus:border-ink/60 px-0 py-2 font-caveat text-2xl text-ink placeholder-ink/25 focus:outline-none transition-colors"
+          />
+        </div>
 
         {/* ── THE BASICS ── */}
         <div ref={basicsRef}><SectionHeader title="THE BASICS" /></div>
@@ -1505,7 +1596,20 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
             className="flex-1 font-bebas text-2xl tracking-[0.15em] bg-red text-white border-2 border-ink py-4 btn-press disabled:opacity-40 disabled:cursor-not-allowed">
             {saving ? 'SAVING…' : isEditMode ? 'Save Changes' : 'Save Game'}
           </button>
-          <button onClick={() => navigate(isEditMode ? `/game/${initialGame!.id}` : '/')}
+          <button
+            onClick={() => {
+              if (!isEditMode) {
+                const hasInput = Object.values(form).some((v) => v !== '' && v !== defaultSport && v !== defaultSeason)
+                if (hasInput) {
+                  const keep = window.confirm('Save your draft for later?')
+                  if (!keep) clearDraft()
+                  navigate('/')
+                  return
+                }
+                clearDraft()
+              }
+              navigate(isEditMode ? `/game/${initialGame!.id}` : '/')
+            }}
             className="font-bebas text-2xl tracking-[0.15em] text-ink border-2 border-ink px-6 py-4 hover:bg-paper-deep transition-colors">
             Cancel
           </button>

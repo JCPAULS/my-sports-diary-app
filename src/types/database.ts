@@ -45,6 +45,7 @@ export interface DbGame {
 
   summary: string | null
   espn_event_id: string | null
+  nickname: string | null
 }
 
 export interface DbUserSettings {
@@ -129,6 +130,7 @@ export function dbGameToGame(row: DbGame): Game {
     outfitPhoto: row.outfit_photo ?? undefined,
 
     summary: row.summary ?? undefined,
+    nickname: row.nickname ?? undefined,
 
     createdAt: row.created_at,
   }
@@ -180,5 +182,6 @@ export function gameToDbGame(
 
     summary: game.summary ?? null,
     espn_event_id: null,
+    nickname: game.nickname ?? null,
   }
 }

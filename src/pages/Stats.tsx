@@ -1,10 +1,11 @@
-import { lazy, Suspense, Component, type ReactNode } from 'react'
+import { lazy, Suspense, Component, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useGames } from '@/lib/useGames'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport } from '@/lib/sports'
 import { getAllMilestones, type Milestone } from '@/lib/milestones'
 import { getVenueCoordinates, getVenuePhoto, type MapPin } from '@/lib/venues'
+import { ENABLED_SPORTS } from '@/lib/sports'
 import { getSettings } from '@/lib/settings'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
@@ -224,6 +225,9 @@ const MILESTONE_CATEGORIES: { id: Milestone['category']; label: string }[] = [
 export default function Stats() {
   const navigate = useNavigate()
   const { games, loading } = useGames()
+  const [mapSportFilter, setMapSportFilter] = useState<string>(
+    () => localStorage.getItem('sports-diary-map-sport-filter') ?? 'all'
+  )
 
   const header = (
     <header className="bg-hero-blue border-b-4 border-ink">
@@ -289,10 +293,18 @@ export default function Stats() {
   const sportsCount   = new Set(games.map((g) => g.sportId ?? 'nfl')).size
   const maxVibeCount  = vibes[0]?.count ?? 1
 
+  // Stadium map: sport filter
+  const sportsInGames = [...new Set(games.filter((g) => g.venue).map((g) => g.sportId ?? 'nfl'))]
+  const multiSport = sportsInGames.length > 1
+  const effectiveMapSportFilter = multiSport ? mapSportFilter : 'all'
+  const mapFilteredGames = effectiveMapSportFilter === 'all'
+    ? games
+    : games.filter((g) => (g.sportId ?? 'nfl') === effectiveMapSportFilter)
+
   // Stadium map: count games per venue, deduplicate, resolve coordinates
   const venueGameCounts: Record<string, number> = {}
   const coordTeams: Record<string, Set<string>> = {}
-  for (const g of games) {
+  for (const g of mapFilteredGames) {
     if (g.venue) {
       venueGameCounts[g.venue] = (venueGameCounts[g.venue] ?? 0) + 1
       const info = getVenueCoordinates(g.venue)
@@ -326,6 +338,7 @@ export default function Stats() {
     }
   }
   const uniqueStates = new Set(mapPins.map((p) => p.state)).size
+  const hasAnyVenue = games.some((g) => g.venue)
 
   // Followed teams
   const followedTeams = getSettings().followedTeams
@@ -585,11 +598,37 @@ export default function Stats() {
         )}
 
         {/* ── YOUR STADIUM MAP ── */}
-        {uniqueVenueNames.length > 0 && (
+        {hasAnyVenue && (
           <div className="mb-14">
             <SectionHeader title="YOUR STADIUM MAP" />
+
+            {/* Sport filter — only shown when games span multiple sports */}
+            {multiSport && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {(['all', ...sportsInGames] as string[]).map((sid) => {
+                  const label = sid === 'all' ? 'ALL' : (ENABLED_SPORTS.find((s) => s.id === sid)?.label ?? sid.toUpperCase())
+                  const active = effectiveMapSportFilter === sid
+                  return (
+                    <button
+                      key={sid}
+                      type="button"
+                      onClick={() => {
+                        setMapSportFilter(sid)
+                        localStorage.setItem('sports-diary-map-sport-filter', sid)
+                      }}
+                      className={`font-bebas text-sm tracking-[0.15em] px-4 py-1.5 border-2 border-ink transition-all ${
+                        active ? 'bg-red text-white shadow-[2px_2px_0_#000]' : 'bg-paper text-ink/60 hover:text-ink hover:bg-paper-deep'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             {mapPins.length > 0 ? (
-              <MapErrorBoundary>
+              <MapErrorBoundary key={effectiveMapSportFilter}>
                 <Suspense fallback={
                   <div className="w-full h-64 lg:h-80 border-2 border-ink bg-paper-deep flex items-center justify-center">
                     <p className="font-bebas text-xl text-ink/40 tracking-[0.2em]">LOADING MAP…</p>

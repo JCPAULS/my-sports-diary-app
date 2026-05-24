@@ -63,4 +63,5 @@ export interface Game {
   rootingFor?: string     // team name the user was rooting for
   collegeSportType?: string // college games only: "Football", "Basketball (Men's)", etc.
   outfitPhoto?: string    // single compressed photo of what you wore
+  nickname?: string       // optional short label for the game, max 60 chars
 }

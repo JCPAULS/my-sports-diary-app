@@ -137,6 +137,9 @@ export default function GameDetail() {
           <div className="lg:col-span-2 mb-8 lg:mb-0">
             <div className="bg-paper-deep border-2 border-ink card-stamp">
               <div className="p-6">
+                {game.nickname && (
+                  <p className="font-caveat text-xl text-navy mb-2 leading-tight">{game.nickname}</p>
+                )}
                 {game.sportId === 'custom' ? (
                   <p className="font-bebas text-sm tracking-[0.2em] text-ink/40 mb-1">
                     CUSTOM ENTRY{game.level ? ` · ${game.level.toUpperCase()}` : ''}
