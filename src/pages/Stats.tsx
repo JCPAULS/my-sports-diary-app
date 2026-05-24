@@ -155,9 +155,9 @@ function gameDateLabel(g: Game): string {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const SHADOWS = [
-  'shadow-[3px_3px_0_var(--color-red)]',  // red
-  'shadow-[3px_3px_0_#d4a017]',  // gold
-  'shadow-[3px_3px_0_#1a2c4e]',  // navy
+  'shadow-[3px_3px_0_var(--color-red)]',
+  'shadow-[3px_3px_0_var(--color-gold)]',
+  'shadow-[3px_3px_0_var(--color-navy)]',
 ]
 
 function StatCard({ children, v = 0, className = '' }: { children: React.ReactNode; v?: number; className?: string }) {
@@ -276,7 +276,6 @@ export default function Stats() {
 
   const teamStats     = computeTeamStats(games)
   const personStats   = computePersonStats(games)
-  const userRecord    = computeRecord(games)
   const vibes         = parseVibes(games)
 
   const milestoneStates = getAllMilestones(games).map((m) => {
@@ -473,7 +472,7 @@ export default function Stats() {
 
         {/* ── FIRST & MOST RECENT ── */}
         <div className="mb-14">
-          <SectionHeader title="BOOKMARKS" />
+          <SectionHeader title="YOUR JOURNEY" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <StatCard v={1}>
               <p className="font-bebas text-xs tracking-[0.2em] text-ink/40 mb-3">FIRST GAME LOGGED</p>
@@ -513,16 +512,18 @@ export default function Stats() {
             <SectionHeader title="SPORTS YOU FOLLOW" />
             <div className="flex flex-wrap gap-3">
               {sportBreakdown.map(({ id, label, count }, i) => (
-                <div
+                <button
                   key={id}
-                  className={`bg-paper-deep border-2 border-ink px-5 py-3 animate-fade-slide-up ${SHADOWS[i % 3]}`}
+                  type="button"
+                  onClick={() => navigate(`/?sport=${encodeURIComponent(id)}`)}
+                  className={`bg-paper-deep border-2 border-ink px-5 py-3 animate-fade-slide-up hover:-translate-y-0.5 transition-all text-left ${SHADOWS[i % 3]}`}
                   style={{ animationDelay: `${i * 60}ms` }}
                 >
                   <p className="font-bebas text-xl text-ink">{label}</p>
                   <p className="font-bebas text-xs tracking-[0.15em] text-ink/40">
                     {count} {count === 1 ? 'game' : 'games'}
                   </p>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -532,18 +533,6 @@ export default function Stats() {
         {personStats.length > 0 && (
           <div className="mb-14">
             <SectionHeader title="WHO YOU'VE GONE WITH" />
-
-            {/* User's own overall record */}
-            {(userRecord.wins + userRecord.losses + userRecord.ties) > 0 && (
-              <div className="mb-6 inline-flex items-baseline gap-3 bg-ink px-5 py-3 border-2 border-ink shadow-[3px_3px_0_#d4a017]">
-                <span className="font-bebas text-xs tracking-[0.2em] text-gold/70">YOUR RECORD</span>
-                <span className="font-bebas text-4xl leading-none">
-                  <span className="text-red">{userRecord.wins}</span>
-                  <span className="text-gold">–{userRecord.losses}</span>
-                  {userRecord.ties > 0 && <span className="text-gold">–{userRecord.ties}</span>}
-                </span>
-              </div>
-            )}
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {personStats.map((ps, i) => (
@@ -644,12 +633,12 @@ export default function Stats() {
 
             {/* Quick stats row */}
             <div className="flex flex-wrap gap-4 mt-4">
-              <div className="bg-paper-deep border-2 border-ink px-5 py-3 shadow-[3px_3px_0_#d4a017]">
+              <div className="bg-paper-deep border-2 border-ink px-5 py-3 shadow-[3px_3px_0_var(--color-gold)]">
                 <p className="font-bebas text-xs tracking-[0.2em] text-ink/40">STADIUMS ON MAP</p>
                 <p className="font-bebas text-4xl text-red leading-none">{mapPins.length}</p>
               </div>
               {uniqueStates > 0 && (
-                <div className="bg-paper-deep border-2 border-ink px-5 py-3 shadow-[3px_3px_0_#1a2c4e]">
+                <div className="bg-paper-deep border-2 border-ink px-5 py-3 shadow-[3px_3px_0_var(--color-navy)]">
                   <p className="font-bebas text-xs tracking-[0.2em] text-ink/40">STATES / PROVINCES</p>
                   <p className="font-bebas text-4xl text-navy leading-none">{uniqueStates}</p>
                 </div>

@@ -62,6 +62,7 @@ export interface Game {
   attendees?: string[]    // structured array parsed from whoWasThere
   rootingFor?: string     // team name the user was rooting for
   collegeSportType?: string // college games only: "Football", "Basketball (Men's)", etc.
+  customSportType?: string  // custom games only: "Soccer", "Volleyball", or user-typed value
   outfitPhoto?: string    // single compressed photo of what you wore
   nickname?: string       // optional short label for the game, max 60 chars
 }

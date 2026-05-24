@@ -142,7 +142,7 @@ export default function GameDetail() {
                 )}
                 {game.sportId === 'custom' ? (
                   <p className="font-bebas text-sm tracking-[0.2em] text-ink/40 mb-1">
-                    CUSTOM ENTRY{game.level ? ` · ${game.level.toUpperCase()}` : ''}
+                    CUSTOM{game.customSportType ? ` · ${game.customSportType.toUpperCase()}` : game.level ? ` · ${game.level.toUpperCase()}` : ' ENTRY'}
                   </p>
                 ) : game.sportId === 'college' ? (
                   <p className="font-bebas text-sm tracking-[0.2em] text-ink/40 mb-1">

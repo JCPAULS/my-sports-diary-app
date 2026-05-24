@@ -24,19 +24,22 @@ interface SeasonGroup {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getGameSeason(game: Game): string {
-  return game.season ?? game.date?.slice(0, 4) ?? 'Unknown'
+  // Use the actual game date's year so a 2018 game logged today appears in 2018
+  if (game.date) return game.date.slice(0, 4)
+  return game.season ?? 'Unknown'
 }
 
 function getGameSortKey(game: Game): number {
+  // Descending within each group: most recent first
+  if (game.date) {
+    const [y, m, d] = game.date.split('-').map(Number)
+    return -(y * 10000 + m * 100 + d)
+  }
   if (game.week) {
     const sport = getSport(game.sportId ?? 'nfl')
-    return sport ? sport.getScheduleSortOrder(game.week) : 99
+    return -(sport ? sport.getScheduleSortOrder(game.week) : 99)
   }
-  if (game.date) {
-    const [, m, d] = game.date.split('-').map(Number)
-    return 100 + m + d / 100   // after any week-keyed games, sorted by date
-  }
-  return 999
+  return -new Date(game.createdAt).getTime() / 1_000_000_000
 }
 
 function groupGames(games: Game[]): SeasonGroup[] {
@@ -47,10 +50,10 @@ function groupGames(games: Game[]): SeasonGroup[] {
     bySeason[s].push(game)
   }
   return Object.entries(bySeason)
-    .sort(([a], [b]) => b.localeCompare(a))   // newest season first
+    .sort(([a], [b]) => (parseInt(b) || 0) - (parseInt(a) || 0))   // newest year first
     .map(([season, gs]) => ({
       season,
-      games: gs.sort((a, b) => getGameSortKey(a) - getGameSortKey(b)),  // week 1 → Super Bowl
+      games: gs.sort((a, b) => getGameSortKey(a) - getGameSortKey(b)),
     }))
 }
 
@@ -95,6 +98,7 @@ const MULTI_SPORT = ENABLED_SPORTS.filter((s) => !s.isCustom).length > 1
 
 function getSportChip(game: Game): string {
   if (game.sportId === 'custom') {
+    if (game.customSportType) return `CUSTOM · ${game.customSportType.toUpperCase()}`
     return game.level ? `CUSTOM · ${game.level.toUpperCase()}` : 'CUSTOM'
   }
   if (game.sportId === 'college') {
@@ -529,12 +533,12 @@ export default function Home() {
 
   const { games: allGames, loading } = useGames()
 
-  // Filter panel state — not persisted except team initialised from URL ?team=X
-  const [filtersOpen, setFiltersOpen] = useState(() => !!searchParams.get('team'))
+  // Filter panel state — team and sport can be pre-set from URL params
+  const [filtersOpen, setFiltersOpen] = useState(() => !!(searchParams.get('team') || searchParams.get('sport')))
   const [filterYear, setFilterYear] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
-  const [filterSport, setFilterSport] = useState('')
+  const [filterSport, setFilterSport] = useState(() => searchParams.get('sport') ?? '')
   const [filterTeam, setFilterTeam] = useState(() => searchParams.get('team') ?? '')
 
   if (loading) {
@@ -677,8 +681,8 @@ export default function Home() {
 
         {/* ── Filter panel ── */}
         {filtersOpen && (
-          <div className="mb-6 border-2 border-ink bg-paper-deep p-5 shadow-[4px_4px_0_#000]">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="mb-6 border-2 border-ink bg-paper-deep p-4 shadow-[4px_4px_0_#000]">
+            <div className="flex flex-col gap-3 mb-4 sm:grid sm:grid-cols-2 lg:grid-cols-4">
 
               {/* Year */}
               <div>
@@ -731,7 +735,7 @@ export default function Home() {
                         key={sid}
                         type="button"
                         onClick={() => setFilterSport(sid)}
-                        className={`font-bebas text-sm tracking-[0.15em] px-3 py-1.5 border-2 border-ink transition-all ${
+                        className={`font-bebas text-sm tracking-[0.15em] px-3 py-2 min-h-[44px] border-2 border-ink transition-all ${
                           active ? 'bg-red text-white shadow-[2px_2px_0_#000]' : 'bg-paper text-ink/60 hover:text-ink hover:bg-paper-deep'
                         }`}
                       >
@@ -747,7 +751,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="font-bebas text-sm tracking-[0.15em] text-ink/50 border border-ink/30 px-4 py-1.5 hover:text-ink hover:border-ink transition-colors"
+                className="font-bebas text-sm tracking-[0.15em] text-ink/50 border border-ink/30 px-4 py-2 min-h-[44px] hover:text-ink hover:border-ink transition-colors"
               >
                 CLEAR FILTERS
               </button>
@@ -768,7 +772,7 @@ export default function Home() {
 
         {/* Attendee filter banner */}
         {attendeeFilter && (
-          <div className="flex items-center gap-3 mb-6 bg-navy text-white px-4 py-2.5 border-2 border-ink shadow-[3px_3px_0_#d4a017]">
+          <div className="flex items-center gap-3 mb-6 bg-navy text-white px-4 py-2.5 border-2 border-ink shadow-[3px_3px_0_var(--color-gold)]">
             <span className="font-bebas text-sm tracking-[0.2em] flex-1">GAMES WITH {attendeeFilter.toUpperCase()}</span>
             <button
               onClick={() => setSearchParams({})}

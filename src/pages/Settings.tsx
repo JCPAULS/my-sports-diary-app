@@ -184,7 +184,7 @@ export default function Settings() {
                 onClick={() => setSettings((p) => ({ ...p, themeMode: mode }))}
                 className={`font-bebas text-lg tracking-[0.15em] px-5 py-2.5 border-2 border-ink transition-all ${
                   settings.themeMode === mode
-                    ? 'bg-ink text-gold shadow-[3px_3px_0_var(--color-gold)]'
+                    ? 'bg-red text-white shadow-[3px_3px_0_#000]'
                     : 'bg-paper text-ink/50 hover:text-ink'
                 }`}
               >
@@ -278,7 +278,7 @@ export default function Settings() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="font-bebas text-2xl tracking-[0.15em] bg-ink text-gold border-2 border-ink px-8 py-3 btn-press disabled:opacity-50"
+            className="font-bebas text-2xl tracking-[0.15em] bg-red text-white border-2 border-ink px-8 py-3 btn-press disabled:opacity-50"
           >
             {saving ? 'SAVING…' : saved ? 'SAVED ✓' : 'SAVE SETTINGS'}
           </button>

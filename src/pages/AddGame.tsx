@@ -6,7 +6,7 @@ import { fetchTeams, fetchTeamSchedule, fetchGameSummary, fetchGameOnDate } from
 import { readPhotoMeta } from '@/lib/photoMeta'
 import { findVenueByCoords, getVenueSportHint } from '@/lib/venues'
 import { NFL_WEEKS, WEEK_ORDER, getWeekLabel, NFL_FALLBACK_TEAMS } from '@/lib/nflTeams'
-import { ENABLED_SPORTS, getSport, CUSTOM_LEVELS, COLLEGE_SPORT_TYPES } from '@/lib/sports'
+import { ENABLED_SPORTS, getSport, CUSTOM_LEVELS, COLLEGE_SPORT_TYPES, CUSTOM_SPORT_TYPES } from '@/lib/sports'
 import { getTeamsBySport } from '@/lib/teams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
@@ -39,8 +39,9 @@ interface FormState {
   whatYouAte: string
   whoDrove: string
   pregameRitual: string
-  level: string          // custom sport only
-  collegeSportType: string  // college sport only
+  level: string              // custom sport only
+  collegeSportType: string   // college sport only
+  customSportType: string    // custom sport only
   nickname: string
 }
 
@@ -268,6 +269,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     pregameRitual: initialGame.pregameRitual ?? '',
     level: initialGame.level ?? '',
     collegeSportType: initialGame.collegeSportType ?? '',
+    customSportType: initialGame.customSportType ?? '',
     nickname: initialGame.nickname ?? '',
   } : {
     sport: defaultSport, week: '', year: defaultSeason, date: '',
@@ -275,7 +277,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     venue: '', section: '', row: '', seatNumbers: '',
     notes: '', whoWasThere: '', mvp: '', vibe: '', rootingFor: '',
     whatYouWore: '', whatYouAte: '', whoDrove: '', pregameRitual: '',
-    level: '', collegeSportType: '', nickname: '',
+    level: '', collegeSportType: '', customSportType: '', nickname: '',
   })
 
   // Existing attendees from diary — loaded async for autocomplete
@@ -338,6 +340,13 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   const [outfitPhoto, setOutfitPhoto] = useState<string | null>(initialGame?.outfitPhoto ?? null)
   const [processingCount, setProcessingCount] = useState(0)
   const [saving, setSaving] = useState(false)
+  // Track "Other (type your own)" mode for college/custom sport type pickers
+  const [showCollegeOther, setShowCollegeOther] = useState(
+    () => !!initialGame?.collegeSportType && !COLLEGE_SPORT_TYPES.includes(initialGame.collegeSportType)
+  )
+  const [showCustomSportOther, setShowCustomSportOther] = useState(
+    () => !!initialGame?.customSportType && !CUSTOM_SPORT_TYPES.includes(initialGame.customSportType)
+  )
   const [showDraftBanner, setShowDraftBanner] = useState(false)
   const [storageWarn, setStorageWarn] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -744,6 +753,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       scheduleLabel: scheduleLabel ?? undefined,
       level: isCustom && !isCollege && form.level ? form.level : undefined,
       collegeSportType: isCollege && form.collegeSportType ? form.collegeSportType : undefined,
+      customSportType: isCustom && !isCollege && form.customSportType ? form.customSportType : undefined,
       homeTeam: form.homeTeam.trim(),
       awayTeam: form.awayTeam.trim(),
       homeScore: form.homeScore !== '' ? Number(form.homeScore) : undefined,
@@ -769,9 +779,11 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       createdAt: initialGame?.createdAt ?? new Date().toISOString(),
     }
 
+    let navigated = false
     try {
       if (isEditMode) {
         await updateGame(game)
+        navigated = true
         navigate(`/game/${initialGame!.id}`)
         return
       }
@@ -784,6 +796,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       if (fresh.length > 0) {
         setNewMilestones(fresh)
       } else {
+        navigated = true
         navigate('/')
       }
     } catch (err) {
@@ -793,7 +806,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
           : "Something went wrong saving your game. Please try again."
       )
     } finally {
-      setSaving(false)
+      if (!navigated) setSaving(false)
     }
   }
 
@@ -834,7 +847,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       {/* ── Milestone celebration modal ── */}
       {newMilestones.length > 0 && (
         <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-          <div className="bg-paper border-4 border-ink shadow-[8px_8px_0_#d4a017] max-w-sm w-full animate-fade-slide-up">
+          <div className="bg-paper border-4 border-ink shadow-[8px_8px_0_var(--color-gold)] max-w-sm w-full animate-fade-slide-up">
             <div className="bg-ink px-6 py-4 text-center">
               <p className="font-bebas text-3xl text-gold tracking-[0.2em]">MILESTONE UNLOCKED!</p>
             </div>
@@ -1285,19 +1298,43 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
                   <div className={`${inputClass} bg-paper-deep text-ink/50 select-none cursor-default`}>College</div>
                 </Field>
                 <Field label="Sport">
-                  <select value={form.collegeSportType} onChange={(e) => set('collegeSportType', e.target.value)} className={selectClass}>
+                  <select
+                    value={showCollegeOther ? 'Other (type your own)' : form.collegeSportType}
+                    onChange={(e) => {
+                      if (e.target.value === 'Other (type your own)') {
+                        setShowCollegeOther(true)
+                        set('collegeSportType', '')
+                      } else {
+                        setShowCollegeOther(false)
+                        set('collegeSportType', e.target.value)
+                      }
+                    }}
+                    className={selectClass}
+                  >
                     <option value="">Select sport…</option>
                     {COLLEGE_SPORT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </Field>
               </div>
+              {showCollegeOther && (
+                <Field label="Sport Name">
+                  <input
+                    type="text"
+                    value={form.collegeSportType}
+                    onChange={(e) => set('collegeSportType', e.target.value.slice(0, 60))}
+                    placeholder="e.g. Ultimate Frisbee, Archery, Fencing…"
+                    className={inputClass}
+                    autoFocus
+                  />
+                </Field>
+              )}
               <Field label="Date *">
                 <input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} className={inputClass} />
               </Field>
             </>
           )}
 
-          {/* Custom / Other: level + date (required) */}
+          {/* Custom / Other: level + sport type + date (required) */}
           {isCustom && !isCollege && (
             <>
               <Field label="Level">
@@ -1306,6 +1343,36 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
                   {CUSTOM_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
               </Field>
+              <Field label="Sport Type">
+                <select
+                  value={showCustomSportOther ? 'Other (type your own)' : form.customSportType}
+                  onChange={(e) => {
+                    if (e.target.value === 'Other (type your own)') {
+                      setShowCustomSportOther(true)
+                      set('customSportType', '')
+                    } else {
+                      setShowCustomSportOther(false)
+                      set('customSportType', e.target.value)
+                    }
+                  }}
+                  className={selectClass}
+                >
+                  <option value="">Select sport…</option>
+                  {CUSTOM_SPORT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              {showCustomSportOther && (
+                <Field label="Sport Name">
+                  <input
+                    type="text"
+                    value={form.customSportType}
+                    onChange={(e) => set('customSportType', e.target.value.slice(0, 60))}
+                    placeholder="e.g. Disc Golf, Triathlon, Esports…"
+                    className={inputClass}
+                    autoFocus
+                  />
+                </Field>
+              )}
               <Field label="Date *">
                 <input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} className={inputClass} />
               </Field>

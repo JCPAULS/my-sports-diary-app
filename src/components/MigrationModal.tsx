@@ -41,7 +41,7 @@ export default function MigrationModal() {
 
   return (
     <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-      <div className="bg-paper border-4 border-ink shadow-[8px_8px_0_#d4a017] max-w-sm w-full animate-fade-slide-up">
+      <div className="bg-paper border-4 border-ink shadow-[8px_8px_0_var(--color-gold)] max-w-sm w-full animate-fade-slide-up">
         <div className="bg-ink px-6 py-4">
           <p className="font-bebas text-2xl text-gold tracking-[0.2em]">BACK UP YOUR DIARY</p>
         </div>

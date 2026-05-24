@@ -146,7 +146,7 @@ export function getSport(id: string): SportConfig | undefined {
 
 export const ENABLED_SPORTS = SPORTS.filter((s) => s.enabled)
 
-export const CUSTOM_LEVELS = ['Youth', 'High School', 'College Club', 'Recreational', 'Other']
+export const CUSTOM_LEVELS = ['Youth', 'High School', 'College Club', 'Recreational']
 
 export const COLLEGE_SPORT_TYPES = [
   'Football',
@@ -168,5 +168,29 @@ export const COLLEGE_SPORT_TYPES = [
   'Field Hockey',
   'Rowing',
   'Water Polo',
-  'Other',
+  'Other (type your own)',
+]
+
+export const CUSTOM_SPORT_TYPES = [
+  'Soccer',
+  'Baseball',
+  'Basketball',
+  'Football',
+  'Hockey',
+  'Volleyball',
+  'Softball',
+  'Lacrosse',
+  'Tennis',
+  'Track & Field',
+  'Swimming',
+  'Wrestling',
+  'Gymnastics',
+  'Golf',
+  'Cross Country',
+  'Field Hockey',
+  'Rugby',
+  'Cricket',
+  'Bowling',
+  'Cheer / Dance',
+  'Other (type your own)',
 ]

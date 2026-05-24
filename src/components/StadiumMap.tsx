@@ -27,7 +27,7 @@ function makePinIcon(gameCount: number): L.DivIcon {
     gameCount > 1
       ? `<div style="
           position:absolute;top:-6px;right:-7px;
-          background:#d4a017;border:1.5px solid #000;
+          background:var(--color-gold,#d4a017);border:1.5px solid #000;
           border-radius:50%;width:17px;height:17px;
           display:flex;align-items:center;justify-content:center;
           font-size:9px;font-weight:700;font-family:sans-serif;color:#000;
