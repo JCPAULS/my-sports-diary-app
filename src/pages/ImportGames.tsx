@@ -10,8 +10,8 @@ import type { Milestone } from '@/lib/milestones'
 import { ENABLED_SPORTS } from '@/lib/sports'
 import type { Game, GameResult } from '@/types/Game'
 
-const MAX_IMPORT = 50
 const BATCH_SIZE = 10
+const LARGE_BATCH_THRESHOLD = 100
 
 const inputCls =
   'w-full bg-white border-2 border-ink px-3 py-2.5 font-archivo text-sm text-ink placeholder-ink/30 focus:outline-none focus:border-red transition-colors'
@@ -67,7 +67,7 @@ export default function ImportGames() {
 
   const [step, setStep] = useState<Step>('upload')
   const [files, setFiles] = useState<File[]>([])
-  const [overLimit, setOverLimit] = useState(false)
+  const [showLargeWarning, setShowLargeWarning] = useState(false)
   const [dragOver, setDragOver] = useState(false)
 
   const [progress, setProgress] = useState(0)
@@ -88,20 +88,15 @@ export default function ImportGames() {
 
   function acceptFiles(raw: File[]) {
     const images = raw.filter((f) => f.type.startsWith('image/'))
-    if (images.length > MAX_IMPORT) {
-      setFiles(images.slice(0, MAX_IMPORT))
-      setOverLimit(true)
-    } else {
-      setFiles(images)
-      setOverLimit(false)
-    }
+    setFiles(images)
   }
 
   // ── Processing ────────────────────────────────────────────────────────────────
 
-  async function startProcessing() {
+  async function startProcessing(filesToProcess: File[]) {
     cancelledRef.current = false
-    setTotal(files.length)
+    setFiles([])  // free File references from React state — raw data freed once compressFile runs
+    setTotal(filesToProcess.length)
     setProgress(0)
     setStep('processing')
 
@@ -112,12 +107,21 @@ export default function ImportGames() {
     }
 
     const all: ProcessedPhoto[] = []
-    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
       if (cancelledRef.current) return
-      const batch = files.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(batch.map((f) => processPhotoFile(f)))
-      all.push(...results)
-      setProgress(all.length)
+      const batch = filesToProcess.slice(i, i + BATCH_SIZE)
+      const results = await Promise.all(
+        batch.map((f) =>
+          processPhotoFile(f).catch((err) => {
+            console.warn('[import] skipping photo due to error:', f.name, err)
+            return null
+          })
+        )
+      )
+      for (const r of results) {
+        if (r) all.push(r)
+      }
+      setProgress(i + batch.length)
     }
 
     if (cancelledRef.current) return
@@ -308,7 +312,7 @@ export default function ImportGames() {
   function resetForNewImport() {
     setStep('upload')
     setFiles([])
-    setOverLimit(false)
+    setShowLargeWarning(false)
     setGroups([])
     setReviews([])
     setIdx(0)
@@ -363,7 +367,7 @@ export default function ImportGames() {
             <div className="text-4xl mb-3">📷</div>
             <p className="font-bebas text-xl tracking-[0.1em] mb-1">DROP PHOTOS HERE</p>
             <p className="font-archivo text-sm text-ink/50">or click to select — JPEG, PNG, HEIC accepted</p>
-            <p className="font-archivo text-xs text-ink/40 mt-2">Up to {MAX_IMPORT} photos per import</p>
+            <p className="font-archivo text-xs text-ink/40 mt-2">No limit on photo count</p>
           </div>
 
           <input
@@ -377,22 +381,51 @@ export default function ImportGames() {
             }}
           />
 
-          {overLimit && (
-            <p className="mt-3 font-archivo text-sm text-amber-600">
-              Only the first {MAX_IMPORT} photos will be imported. Select fewer to stay under the limit.
-            </p>
-          )}
-
           {files.length > 0 && (
             <div className="mt-6 flex items-center justify-between">
               <p className="font-bebas text-lg tracking-[0.1em]">
                 {files.length} PHOTO{files.length !== 1 ? 'S' : ''} SELECTED
               </p>
-              <button onClick={startProcessing} className={primaryBtnCls}>
+              <button
+                onClick={() => {
+                  if (files.length > LARGE_BATCH_THRESHOLD) {
+                    setShowLargeWarning(true)
+                  } else {
+                    startProcessing(files)
+                  }
+                }}
+                className={primaryBtnCls}
+              >
                 START PROCESSING →
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Large-batch warning modal ── */}
+      {showLargeWarning && (
+        <div className="fixed inset-0 z-50 bg-ink/60 flex items-center justify-center px-4">
+          <div className="bg-paper border-2 border-ink max-w-sm w-full p-6 shadow-[4px_4px_0_#000]">
+            <p className="font-bebas text-2xl tracking-[0.1em] mb-1">HEADS UP</p>
+            <p className="font-archivo text-sm text-ink/70 mb-6 leading-relaxed">
+              You've selected <strong>{files.length} photos</strong>. This might take a few minutes to process. Continue?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowLargeWarning(false); startProcessing(files) }}
+                className={primaryBtnCls}
+              >
+                CONTINUE
+              </button>
+              <button
+                onClick={() => setShowLargeWarning(false)}
+                className={outlineBtnCls}
+              >
+                PICK FEWER
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -401,7 +434,7 @@ export default function ImportGames() {
         <div className="max-w-md mx-auto px-4 py-16 text-center">
           <div className="font-bebas text-2xl tracking-[0.1em] mb-2">PROCESSING PHOTOS</div>
           <p className="font-archivo text-sm text-ink/60 mb-6">
-            Reading photo {Math.min(progress + 1, total)} of {total}…
+            {progress === 0 ? 'Starting…' : `${progress} of ${total} processed`}
           </p>
           <div className="w-full bg-ink/10 h-2 mb-8">
             <div
