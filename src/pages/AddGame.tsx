@@ -784,7 +784,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       if (isEditMode) {
         await updateGame(game)
         navigated = true
-        navigate(`/game/${initialGame!.id}`)
+        navigate('/')
         return
       }
 
@@ -896,7 +896,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       <main className="max-w-2xl mx-auto px-4 py-8">
         {/* Ticket stub decoration */}
         <div className="hidden md:flex items-center gap-3 mb-8">
-          <div className="bg-ink text-gold font-bebas text-xs tracking-[0.25em] px-3 py-1.5">
+          <div className="bg-red text-white font-bebas text-xs tracking-[0.25em] px-3 py-1.5">
             {isEditMode ? 'EDIT ENTRY' : 'NEW ENTRY'}
           </div>
           <div className="flex-1 border-t-2 border-dashed border-ink/20" />
@@ -916,7 +916,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
               <button
                 type="button"
                 onClick={resumeDraft}
-                className="font-bebas text-sm tracking-[0.15em] bg-ink text-gold border-2 border-ink px-4 py-2 btn-press"
+                className="font-bebas text-sm tracking-[0.15em] bg-red text-white border-2 border-ink px-4 py-2 btn-press"
               >
                 RESUME DRAFT
               </button>
@@ -1067,7 +1067,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
 
             <button type="button" onClick={handleFindGames}
               disabled={!findTeamId || isLoadingSchedule || isLoadingTeams}
-              className="font-bebas text-lg tracking-[0.15em] bg-ink text-gold border-2 border-ink px-5 py-2 btn-press disabled:opacity-40 disabled:cursor-not-allowed"
+              className="font-bebas text-lg tracking-[0.15em] bg-red text-white border-2 border-ink px-5 py-2 btn-press disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isLoadingSchedule ? 'SEARCHING…' : 'FIND GAMES'}
             </button>
@@ -1089,7 +1089,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
                       type="button"
                       onClick={() => setFilterOpen((o) => !o)}
                       className={`font-bebas text-xs tracking-[0.2em] px-3 py-1.5 border-2 border-ink transition-colors ${
-                        filterOpen || hasActiveFilter ? 'bg-ink text-gold' : 'bg-paper text-ink hover:bg-paper-deep'
+                        filterOpen || hasActiveFilter ? 'bg-red text-white' : 'bg-paper text-ink hover:bg-paper-deep'
                       }`}
                     >
                       {filterOpen ? '▾ FILTER' : '▸ FILTER'}

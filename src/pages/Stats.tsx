@@ -16,25 +16,30 @@ const StadiumMap = lazy(() => import('@/components/StadiumMap'))
 
 class MapErrorBoundary extends Component<
   { children: ReactNode },
-  { error: boolean; key: number }
+  { error: boolean; message: string; key: number }
 > {
   constructor(props: { children: ReactNode }) {
     super(props)
-    this.state = { error: false, key: 0 }
+    this.state = { error: false, message: '', key: 0 }
   }
-  static getDerivedStateFromError() { return { error: true } }
+  static getDerivedStateFromError(error: Error) {
+    return { error: true, message: error?.message ?? 'Unknown error' }
+  }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[MapErrorBoundary] caught:', error, info.componentStack)
   }
-  retry = () => this.setState((s) => ({ error: false, key: s.key + 1 }))
+  retry = () => this.setState((s) => ({ error: false, message: '', key: s.key + 1 }))
   render() {
     if (this.state.error) {
       return (
-        <div className="w-full h-64 lg:h-80 border-2 border-ink/20 bg-paper-deep flex flex-col items-center justify-center gap-3">
+        <div className="w-full h-64 lg:h-80 border-2 border-ink/20 bg-paper-deep flex flex-col items-center justify-center gap-3 px-4">
           <p className="font-bebas text-xl text-ink/40 tracking-[0.2em]">MAP COULDN'T LOAD</p>
+          {this.state.message && (
+            <p className="font-mono text-xs text-ink/30 max-w-xs text-center break-words">{this.state.message}</p>
+          )}
           <button
             onClick={this.retry}
-            className="font-bebas text-sm tracking-[0.15em] bg-ink text-gold px-4 py-2 border border-ink/30 hover:opacity-80 transition-opacity"
+            className="font-bebas text-sm tracking-[0.15em] bg-red text-white px-4 py-2 border border-ink/30 hover:opacity-80 transition-opacity"
           >
             TRY AGAIN
           </button>
@@ -452,7 +457,7 @@ export default function Stats() {
                 <p className="font-bebas text-xs tracking-[0.2em] text-ink/40 mb-2">MOST-ATTENDED TEAM</p>
                 <TeamBadge team={topTeam.team} sportId={topTeam.sportId} size="md" className="mb-2" />
                 <p className="font-bebas text-sm text-ink leading-tight">{topTeam.team}</p>
-                <p className="font-bebas text-3xl text-gold leading-none">{topTeam.total} games</p>
+                <p className="font-bebas text-3xl text-red leading-none">{topTeam.total} games</p>
               </StatCard>
             )}
 

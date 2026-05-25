@@ -667,7 +667,7 @@ export default function Home() {
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
             className={`font-bebas text-sm tracking-[0.15em] border-2 border-ink px-4 py-2 flex items-center gap-2 transition-colors ${
-              filtersOpen ? 'bg-ink text-gold' : 'bg-paper text-ink hover:bg-paper-deep'
+              filtersOpen ? 'bg-red text-white' : 'bg-paper text-ink hover:bg-paper-deep'
             }`}
           >
             FILTERS

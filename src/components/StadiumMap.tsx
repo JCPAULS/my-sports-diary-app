@@ -9,12 +9,13 @@ import type { MapPin } from '@/lib/venues'
 function FitBounds({ pins }: { pins: MapPin[] }) {
   const map = useMap()
   useEffect(() => {
-    if (!pins.length) return
-    if (pins.length === 1) {
-      map.setView([pins[0].lat, pins[0].lng], 9)
+    const valid = pins.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    if (!valid.length) return
+    if (valid.length === 1) {
+      map.setView([valid[0].lat, valid[0].lng], 9)
     } else {
-      const bounds = L.latLngBounds(pins.map((p) => [p.lat, p.lng] as [number, number]))
-      map.fitBounds(bounds, { padding: [48, 48] })
+      const bounds = L.latLngBounds(valid.map((p) => [p.lat, p.lng] as [number, number]))
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48] })
     }
   }, [map, pins])
   return null
@@ -154,8 +155,13 @@ export default function StadiumMap({ pins }: StadiumMapProps) {
     ? [pins[0].lat, pins[0].lng]
     : [39.5, -98.35]
 
+  // Stable key derived from pin coordinates — forces a clean Leaflet remount
+  // when the pin set changes, preventing "Map container is already initialized".
+  const mapKey = pins.map((p) => `${p.lat},${p.lng}`).join('|')
+
   return (
     <MapContainer
+      key={mapKey}
       center={center}
       zoom={4}
       scrollWheelZoom={false}
