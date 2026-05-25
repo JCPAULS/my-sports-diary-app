@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useGames } from '@/lib/useGames'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport, ENABLED_SPORTS } from '@/lib/sports'
@@ -528,6 +528,7 @@ const filterSelectCls = `${filterInputCls} cursor-pointer`
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const attendeeFilter = searchParams.get('attendee')
 
@@ -660,7 +661,7 @@ export default function Home() {
       {/* ── Main ── */}
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
 
-        {/* ── FILTERS button ── */}
+        {/* ── FILTERS + IMPORT buttons ── */}
         <div className="flex items-center gap-3 mb-4">
           <button
             type="button"
@@ -677,6 +678,13 @@ export default function Home() {
               {activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'} active
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => navigate('/import')}
+            className="ml-auto font-bebas text-sm tracking-[0.15em] border-2 border-ink px-4 py-2 bg-paper text-ink hover:bg-paper-deep transition-colors flex items-center gap-1.5"
+          >
+            📷 IMPORT FROM PHOTOS
+          </button>
         </div>
 
         {/* ── Filter panel ── */}

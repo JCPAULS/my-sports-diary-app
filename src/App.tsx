@@ -10,6 +10,7 @@ import EditGame from '@/pages/EditGame'
 import GameDetail from '@/pages/GameDetail'
 import Stats from '@/pages/Stats'
 import Settings from '@/pages/Settings'
+import ImportGames from '@/pages/ImportGames'
 import Login from '@/pages/Login'
 import SignUp from '@/pages/SignUp'
 import ResetPassword from '@/pages/ResetPassword'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/game/:id" element={<ProtectedRoute><GameDetail /></ProtectedRoute>} />
           <Route path="/game/:id/edit" element={<ProtectedRoute><EditGame /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/import" element={<ProtectedRoute><ImportGames /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </MigrationProvider>
