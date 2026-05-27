@@ -21,6 +21,14 @@
     background-color: var(--color-paper);
     color: var(--color-ink);
   }
+
+  /* iOS Safari sets an intrinsic min-width on date inputs that ignores CSS
+     max-width / min-width constraints. Removing -webkit-appearance makes
+     them size like plain text inputs and respect w-full / their container. */
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 /* Hard offset shadow + press effect — buttons */
