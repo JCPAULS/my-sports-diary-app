@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
+import { useProfileContext } from '@/lib/ProfileContext'
 
 function UserMenu() {
   const { user, signOut } = useAuth()
@@ -45,6 +46,14 @@ function UserMenu() {
           </div>
 
           <Link
+            to="/profile"
+            onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-3 font-archivo text-sm text-ink hover:bg-ink/5 transition-colors border-b-2 border-ink/10"
+          >
+            My Profile
+          </Link>
+
+          <Link
             to="/settings"
             onClick={() => setOpen(false)}
             className="flex items-center px-4 py-3 font-archivo text-sm text-ink hover:bg-ink/5 transition-colors border-b-2 border-ink/10"
@@ -66,9 +75,10 @@ function UserMenu() {
 
 export default function Nav() {
   const { pathname } = useLocation()
+  const { pendingRequestCount } = useProfileContext()
 
   const link = (to: string, label: string) => {
-    const active = pathname === to
+    const active = pathname === to || pathname.startsWith(to + '/')
     return (
       <Link
         to={to}
@@ -83,11 +93,31 @@ export default function Nav() {
     )
   }
 
+  const friendsActive = pathname === '/friends' || pathname.startsWith('/friends/') || pathname.startsWith('/user/')
+
   return (
     <div className="bg-paper border-b border-ink/15">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 flex items-center gap-0 -mb-[2px]">
         {link('/', 'TIMELINE')}
         {link('/stats', 'STATS')}
+
+        {/* Friends tab with pending badge */}
+        <Link
+          to="/friends"
+          className={`relative font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
+            friendsActive
+              ? 'border-red text-ink'
+              : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
+          }`}
+        >
+          FRIENDS
+          {pendingRequestCount > 0 && (
+            <span className="absolute top-1.5 right-0.5 w-4 h-4 bg-red border border-ink rounded-full flex items-center justify-center font-archivo text-[9px] text-paper font-bold leading-none">
+              {pendingRequestCount > 9 ? '9+' : pendingRequestCount}
+            </span>
+          )}
+        </Link>
+
         {link('/settings', 'SETTINGS')}
         <UserMenu />
       </div>
