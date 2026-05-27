@@ -591,3 +591,134 @@ export async function unreadNotificationCount(): Promise<number> {
   throwOnError(error, 'unreadNotificationCount')
   return count ?? 0
 }
+
+// ─── Discovery ────────────────────────────────────────────────────────────────
+
+// Partial username search — multiple results.
+// Filters: is_discoverable_by_username=true, privacy_mode=false, not self.
+// Note: users who have blocked the caller may still appear here because the
+// blocked_users RLS only exposes the blocker's own rows. Blocked IDs should be
+// filtered client-side using getMyBlockedIds().
+export async function searchByUsername(query: string): Promise<UserProfile[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data, error } = await db
+    .from('user_profiles')
+    .select('*')
+    .ilike('username', `%${query}%`)
+    .eq('is_discoverable_by_username', true)
+    .eq('privacy_mode', false)
+    .neq('user_id', user.id)
+    .limit(10)
+
+  throwOnError(error, 'searchByUsername')
+  return ((data ?? []) as DbUserProfile[]).map(dbProfileToProfile)
+}
+
+// Returns the IDs of users the current user has blocked (for client-side filtering).
+export async function getMyBlockedIds(): Promise<string[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data } = await db
+    .from('blocked_users')
+    .select('blocked_user_id')
+    .eq('blocker_user_id', user.id)
+
+  return ((data ?? []) as { blocked_user_id: string }[]).map(b => b.blocked_user_id)
+}
+
+export interface FriendSuggestion {
+  profile: UserProfile
+  mutualCount: number
+  sampleMutuals: UserProfile[]
+}
+
+// Friend-of-friend suggestions sorted by mutual friend count.
+// Does NOT filter by discovery flags (socially-trusted channel), but DOES
+// respect privacy_mode (the master kill switch per spec).
+export async function getFriendSuggestions(): Promise<FriendSuggestion[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  // My current friendships
+  const { data: myFriendships } = await db
+    .from('friendships')
+    .select('user_a_id,user_b_id')
+    .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+
+  const myFriendIds: string[] = (
+    (myFriendships ?? []) as { user_a_id: string; user_b_id: string }[]
+  ).map(f => (f.user_a_id === user.id ? f.user_b_id : f.user_a_id))
+
+  if (!myFriendIds.length) return []
+
+  // IDs I've blocked (to exclude from suggestions)
+  const { data: blockedData } = await db
+    .from('blocked_users')
+    .select('blocked_user_id')
+    .eq('blocker_user_id', user.id)
+  const blockedIdSet = new Set(
+    ((blockedData ?? []) as { blocked_user_id: string }[]).map(b => b.blocked_user_id)
+  )
+
+  // Friendships of MY friends (cap at 50 for query sanity)
+  const queryFriendIds = myFriendIds.slice(0, 50)
+  const { data: fofFriendships } = await db
+    .from('friendships')
+    .select('user_a_id,user_b_id')
+    .or(`user_a_id.in.(${queryFriendIds.join(',')}),user_b_id.in.(${queryFriendIds.join(',')})`)
+
+  const myFriendIdSet = new Set(myFriendIds)
+  const fofCounts = new Map<string, number>()
+  const fofMutualSets = new Map<string, Set<string>>()
+
+  for (const f of ((fofFriendships ?? []) as { user_a_id: string; user_b_id: string }[])) {
+    const isAMyFriend = myFriendIdSet.has(f.user_a_id)
+    const friendId = isAMyFriend ? f.user_a_id : f.user_b_id
+    const fofId = isAMyFriend ? f.user_b_id : f.user_a_id
+
+    if (fofId === user.id) continue
+    if (myFriendIdSet.has(fofId)) continue
+    if (blockedIdSet.has(fofId)) continue
+
+    fofCounts.set(fofId, (fofCounts.get(fofId) ?? 0) + 1)
+    if (!fofMutualSets.has(fofId)) fofMutualSets.set(fofId, new Set())
+    fofMutualSets.get(fofId)!.add(friendId)
+  }
+
+  const sorted = [...fofCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+  if (!sorted.length) return []
+
+  const fofIds = sorted.map(([id]) => id)
+  const allMutualIds = [...new Set([...fofMutualSets.values()].flatMap(s => [...s]))]
+
+  // Fetch profiles — exclude privacy_mode users (master kill switch)
+  const [profilesRes, mutualsRes] = await Promise.all([
+    db.from('user_profiles').select('*').in('user_id', fofIds).eq('privacy_mode', false),
+    allMutualIds.length
+      ? db.from('user_profiles').select('user_id,display_name,username,profile_photo_url').in('user_id', allMutualIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const profileMap = new Map(
+    ((profilesRes.data ?? []) as DbUserProfile[]).map(p => [p.user_id, dbProfileToProfile(p)])
+  )
+  const mutualMap = new Map(
+    ((mutualsRes.data ?? []) as DbUserProfile[]).map(p => [p.user_id, dbProfileToProfile(p)])
+  )
+
+  return sorted
+    .map(([fofId, mutualCount]) => {
+      const profile = profileMap.get(fofId)
+      if (!profile) return null // filtered by privacy_mode
+      const mutualIds = [...(fofMutualSets.get(fofId) ?? [])]
+      const sampleMutuals = mutualIds
+        .slice(0, 3)
+        .map(id => mutualMap.get(id))
+        .filter((p): p is UserProfile => p !== undefined)
+      return { profile, mutualCount, sampleMutuals }
+    })
+    .filter((x): x is FriendSuggestion => x !== null)
+}

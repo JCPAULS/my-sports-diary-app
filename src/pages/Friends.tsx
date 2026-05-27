@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Nav from '@/components/Nav'
 import AvatarCircle from '@/components/AvatarCircle'
 import ConfirmModal from '@/components/ConfirmModal'
+import FindFriendsTab from '@/components/FindFriendsTab'
 import { useToast } from '@/components/Toast'
 import { useAuth } from '@/lib/AuthContext'
 import { useProfileContext } from '@/lib/ProfileContext'
@@ -455,18 +456,8 @@ export default function Friends() {
         )}
 
         {/* ── FIND TAB ─────────────────────────────────────────────────────── */}
-        {tab === 'find' && (
-          <div className="py-14 text-center">
-            <p className="font-bebas text-3xl tracking-[0.1em] text-ink/20 mb-3">COMING SOON</p>
-            <p className="font-caveat text-xl text-ink/40 mb-6">Find friends by name, email, or share code</p>
-            {myProfile?.shareCode && (
-              <div className="inline-block">
-                <p className="font-archivo text-sm text-ink/40 mb-2">In the meantime, share your code:</p>
-                <ShareCodeBar code={myProfile.shareCode} onCopy={copyShareCode} copied={copied} />
-              </div>
-            )}
-          </div>
-        )}
+        {/* Mounted fresh each time the tab is selected — state resets on tab switch */}
+        {tab === 'find' && <FindFriendsTab />}
       </main>
     </div>
   )
