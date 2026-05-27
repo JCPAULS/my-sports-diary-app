@@ -65,4 +65,9 @@ export interface Game {
   customSportType?: string  // custom games only: "Soccer", "Volleyball", or user-typed value
   outfitPhoto?: string    // single compressed photo of what you wore
   nickname?: string       // optional short label for the game, max 60 chars
+
+  // Friends feature (added in migration 005 — defaults keep existing games visible)
+  isSharedWithFriends?: boolean    // default true — show in friends' feeds
+  isHighlight?: boolean            // default false — user-marked highlight
+  highlightPinnedUntil?: string    // ISO timestamp — when highlight pin expires
 }
