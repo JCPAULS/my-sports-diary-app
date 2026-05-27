@@ -522,7 +522,7 @@ function TeamStatsBanner({ teamName, games }: { teamName: string; games: Game[] 
 
 // ─── Filter input styles ──────────────────────────────────────────────────────
 
-const filterInputCls = 'w-full bg-white border-2 border-ink px-3 py-2 font-archivo text-sm text-ink placeholder-ink/30 focus:outline-none focus:border-red transition-colors'
+const filterInputCls = 'w-full min-w-0 max-w-full bg-white border-2 border-ink px-3 py-2 font-archivo text-sm text-ink placeholder-ink/30 focus:outline-none focus:border-red transition-colors'
 const filterSelectCls = `${filterInputCls} cursor-pointer`
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
