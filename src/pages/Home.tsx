@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useGames } from '@/lib/useGames'
+import { useTaggedGames } from '@/lib/useTaggedGames'
 import { getWeekLabel } from '@/lib/nflTeams'
 import { getSport, ENABLED_SPORTS } from '@/lib/sports'
 import { getAllMilestones } from '@/lib/milestones'
@@ -159,6 +160,54 @@ function GameCard({ game, cardIdx }: { game: Game; cardIdx: number }) {
         <div className="flex items-center gap-3 min-w-0">
           {game.venue && <span className="font-bebas text-xs tracking-[0.15em] text-ink/40 truncate">{game.venue}</span>}
           {game.section && <span className="font-bebas text-[10px] tracking-[0.1em] text-ink/25 flex-shrink-0">SEC {game.section}</span>}
+        </div>
+        <span className="font-bebas text-sm text-ink/30 flex-shrink-0">›</span>
+      </div>
+    </Link>
+  )
+}
+
+// Tagged-in game card — same layout but with a "TAGGED BY" banner and link to
+// the poster's game (via /game/:id since RLS grants tagged-user visibility).
+function TaggedGameCard({ game, cardIdx }: { game: Game; cardIdx: number }) {
+  const hasScore = game.homeScore !== undefined && game.awayScore !== undefined
+  const firstPhoto = game.photos?.[0]
+  const taggerName = game.tagInfo?.taggedByDisplayName ?? 'Someone'
+
+  return (
+    <Link
+      to={`/game/${game.id}`}
+      className="relative block bg-paper-deep border-2 border-ink/40 card-press animate-fade-slide-up w-full max-w-xl"
+      style={{ animationDelay: `${cardIdx * 60}ms` }}
+    >
+      {/* TAGGED BY banner */}
+      <div className="bg-navy/10 border-b border-ink/15 px-4 py-1.5 flex items-center gap-2">
+        <span className="font-bebas text-[10px] tracking-[0.25em] text-navy/70">TAGGED BY</span>
+        <span className="font-bebas text-xs text-navy">{taggerName}</span>
+      </div>
+
+      {firstPhoto && (
+        <div className="absolute top-9 right-3 w-14 h-14 border-2 border-white overflow-hidden shadow-[2px_2px_0_rgba(0,0,0,0.3)] z-10 rotate-2">
+          <PhotoImg src={firstPhoto} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className={firstPhoto ? 'p-4 pr-20' : 'p-4'}>
+        <p className="font-bebas text-xs tracking-[0.2em] text-ink/50 mb-1">
+          {gameLabel(game)}
+        </p>
+        <p className="font-bebas text-2xl lg:text-3xl leading-none text-ink">
+          {game.homeTeam} <span className="text-red">vs</span> {game.awayTeam}
+        </p>
+        {hasScore && (
+          <div className="inline-block bg-ink text-gold font-bebas text-lg tracking-widest px-2.5 py-0.5 mt-2">
+            {game.homeScore} – {game.awayScore}
+          </div>
+        )}
+      </div>
+      <div className="border-t-2 border-dashed border-ink/20 mx-4" />
+      <div className="px-4 py-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          {game.venue && <span className="font-bebas text-xs tracking-[0.15em] text-ink/40 truncate">{game.venue}</span>}
         </div>
         <span className="font-bebas text-sm text-ink/30 flex-shrink-0">›</span>
       </div>
@@ -534,7 +583,16 @@ export default function Home() {
   const attendeeFilter = searchParams.get('attendee')
   const { myProfile } = useProfileContext()
 
-  const { games: allGames, loading } = useGames()
+  const { games: ownedGames, loading: ownedLoading } = useGames()
+  const { taggedGames, loading: taggedLoading } = useTaggedGames()
+  const loading = ownedLoading || taggedLoading
+
+  // Merge owned + tagged games, deduplicating by id (shouldn't overlap, but guard)
+  const ownedIds = new Set(ownedGames.map((g) => g.id))
+  const allGames = [
+    ...ownedGames,
+    ...taggedGames.filter((g) => !ownedIds.has(g.id)),
+  ]
 
   // Filter panel state — team and sport can be pre-set from URL params
   const [filtersOpen, setFiltersOpen] = useState(() => !!(searchParams.get('team') || searchParams.get('sport')))
@@ -868,18 +926,22 @@ export default function Home() {
                   {group.games.map((game) => {
                     const myIdx = cardCounter++
                     const isNew = isRecentlyAdded(game)
+                    const isTagged = !!game.tagInfo
                     return (
                       <div key={game.id} className="flex items-start">
                         <div className={`${GUTTER} flex-shrink-0 pt-5 flex items-start`}>
                           <div className="flex items-center w-full">
                             <div
-                              className={`ml-5 lg:ml-8 w-5 h-5 rounded-full bg-red border-2 border-ink z-10 flex-shrink-0${isNew ? ' animate-pulse-node' : ''}`}
+                              className={`ml-5 lg:ml-8 w-5 h-5 rounded-full border-2 border-ink z-10 flex-shrink-0${isTagged ? ' bg-navy/40' : ' bg-red'}${isNew ? ' animate-pulse-node' : ''}`}
                             />
                             <div className="flex-1 border-t-2 border-dashed border-ink/40" />
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <GameCard game={game} cardIdx={myIdx} />
+                          {isTagged
+                            ? <TaggedGameCard game={game} cardIdx={myIdx} />
+                            : <GameCard game={game} cardIdx={myIdx} />
+                          }
                         </div>
                       </div>
                     )

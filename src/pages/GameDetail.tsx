@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { deleteGame, updateGame } from '@/lib/gameStore'
 import { useGame } from '@/lib/useGame'
+import { getMyTagStatus, removeSelfFromTag } from '@/lib/tagsStore'
+import { useAuth } from '@/lib/AuthContext'
 import { getWeekLabel } from '@/lib/nflTeams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
@@ -43,15 +45,47 @@ function LittleThingRow({ label, value }: { label: string; value?: string }) {
 export default function GameDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null)
   const [isShared, setIsShared] = useState(true)
   const [togglingShare, setTogglingShare] = useState(false)
+
+  // Tag status — determines if "Remove me from this game" button is shown
+  const [tagStatus, setTagStatus] = useState<{
+    isTagged: boolean
+    taggedByDisplayName: string | null
+  } | null>(null)
+  const [removingTag, setRemovingTag] = useState(false)
+  const [tagRemoved, setTagRemoved] = useState(false)
 
   const { game, loading } = useGame(id)
 
   useEffect(() => {
     if (game) setIsShared(game.isSharedWithFriends ?? true)
   }, [game])
+
+  // Load tag status once the game and user are known
+  useEffect(() => {
+    if (!id || !user || !game) return
+    // Only check if the viewer doesn't own this game
+    if (game.isSharedWithFriends !== undefined && user) {
+      getMyTagStatus(id).then(setTagStatus).catch(() => {})
+    }
+  }, [id, user?.id, game?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleRemoveSelfFromTag() {
+    if (!id || !window.confirm('Remove yourself from this game? The poster will keep a note that you were there.')) return
+    setRemovingTag(true)
+    try {
+      await removeSelfFromTag(id)
+      setTagRemoved(true)
+      setTagStatus((prev) => prev ? { ...prev, isTagged: false } : prev)
+    } catch {
+      // silent fail
+    } finally {
+      setRemovingTag(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -347,7 +381,33 @@ export default function GameDetail() {
               </p>
             )}
 
-            {/* Delete */}
+            {/* Tagged-in context */}
+            {tagStatus?.isTagged && !tagRemoved && (
+              <div className="border-t-2 border-ink/10 pt-6 mt-4">
+                <div className="bg-navy/8 border border-ink/15 px-4 py-3 mb-3">
+                  <p className="font-bebas text-xs tracking-[0.2em] text-navy/70 mb-0.5">YOU WERE TAGGED IN THIS GAME</p>
+                  {tagStatus.taggedByDisplayName && (
+                    <p className="font-archivo text-sm text-ink/60">
+                      Tagged by <strong>{tagStatus.taggedByDisplayName}</strong>
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={handleRemoveSelfFromTag}
+                  disabled={removingTag}
+                  className="font-archivo text-sm text-ink/50 hover:text-red underline transition-colors disabled:opacity-40"
+                >
+                  {removingTag ? 'Removing…' : 'Remove me from this game'}
+                </button>
+              </div>
+            )}
+            {tagRemoved && (
+              <div className="border-t-2 border-ink/10 pt-4 mt-4">
+                <p className="font-caveat text-base text-ink/40">You've been removed from this game.</p>
+              </div>
+            )}
+
+            {/* Delete — only shown if user owns this game */}
             <div className="border-t-2 border-ink/10 pt-6 mt-4">
               <button
                 onClick={handleDelete}

@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { saveGame, updateGame, getAllGames } from '@/lib/gameStore'
+import { getTagsWithProfiles, syncGameTags } from '@/lib/tagsStore'
+import { checkRateLimit, consumeRateLimit } from '@/lib/rateLimit'
+import AttendeeField, { type AttendeeEntry } from '@/components/AttendeeField'
 import { useAuth } from '@/lib/AuthContext'
 import { fetchTeams, fetchTeamSchedule, fetchGameSummary, fetchGameOnDate } from '@/lib/sportsApi'
 import { readPhotoMeta } from '@/lib/photoMeta'
@@ -33,7 +36,6 @@ interface FormState {
   row: string
   seatNumbers: string
   notes: string
-  whoWasThere: string
   mvp: string
   vibe: string
   rootingFor: string
@@ -151,53 +153,7 @@ function TeamCombobox({
   )
 }
 
-// Comma-aware attendee input with autocomplete from previous games
-function AttendeeInput({ value, onChange, existingAttendees }: {
-  value: string; onChange: (v: string) => void; existingAttendees: string[]
-}) {
-  const [open, setOpen] = useState(false)
 
-  const parts = value.split(',')
-  const currentPart = parts[parts.length - 1].trimStart()
-  const prevNames = parts.slice(0, -1).map((p) => p.trim().toLowerCase())
-
-  const suggestions = currentPart.length >= 1
-    ? existingAttendees.filter(
-        (n) => n.toLowerCase().startsWith(currentPart.toLowerCase()) && !prevNames.includes(n.toLowerCase())
-      )
-    : []
-
-  function apply(name: string) {
-    const prefix = parts.slice(0, -1)
-    onChange([...prefix, name].join(', '))
-    setOpen(false)
-  }
-
-  return (
-    <div className="relative">
-      <input
-        type="text" value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true) }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="e.g. Dad, Sarah, Uncle Mike"
-        className={inputClass}
-      />
-      {open && suggestions.length > 0 && (
-        <ul className="absolute left-0 right-0 top-full z-20 bg-white border-2 border-ink border-t-0 max-h-40 overflow-y-auto shadow-[2px_2px_0_#000]">
-          {suggestions.map((name) => (
-            <li key={name}>
-              <button type="button" onMouseDown={() => apply(name)}
-                className="w-full text-left px-3 py-2 font-archivo text-sm text-ink hover:bg-paper-deep border-b border-ink/10 last:border-0">
-                {name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
 
 const MAX_PHOTOS = 10
 const STORAGE_WARN_CHARS = 4 * 1024 * 1024  // warn at ~4 MB used
@@ -276,7 +232,6 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     row: initialGame.row ?? '',
     seatNumbers: initialGame.seatNumbers ?? '',
     notes: initialGame.notes ?? '',
-    whoWasThere: initialGame.whoWasThere ?? '',
     mvp: initialGame.mvp ?? '',
     vibe: initialGame.vibe ?? '',
     rootingFor: initialGame.rootingFor ?? '',
@@ -292,19 +247,42 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
     sport: defaultSport, week: '', year: defaultSeason, date: '',
     homeTeam: '', awayTeam: '', homeScore: '', awayScore: '',
     venue: '', section: '', row: '', seatNumbers: '',
-    notes: '', whoWasThere: '', mvp: '', vibe: '', rootingFor: '',
+    notes: '', mvp: '', vibe: '', rootingFor: '',
     whatYouWore: '', whatYouAte: '', whoDrove: '', pregameRitual: '',
     level: '', collegeSportType: '', customSportType: '', nickname: '',
   })
 
-  // Existing attendees from diary — loaded async for autocomplete
-  const [existingAttendees, setExistingAttendees] = useState<string[]>([])
+  // ── Attendee entries (free-text + tagged users) ──
+  const [attendeeEntries, setAttendeeEntries] = useState<AttendeeEntry[]>([])
+  const [tagRateError, setTagRateError] = useState(false)
+
+  // In edit mode, initialise entries from game.attendees[] + game_tags
   useEffect(() => {
-    getAllGames().then((gs) => {
-      const names = new Set<string>()
-      gs.forEach((g) => g.attendees?.forEach((n) => names.add(n)))
-      setExistingAttendees([...names].sort())
-    }).catch(() => {})
+    if (!isEditMode || !initialGame) return
+    getTagsWithProfiles(initialGame.id).then((tags) => {
+      // Build user chips from active tags
+      const activeTagIds = new Set(tags.filter((t) => !t.removedByTaggedUser).map((t) => t.userId))
+      const userEntries: AttendeeEntry[] = tags
+        .filter((t) => !t.removedByTaggedUser)
+        .map((t) => ({
+          type: 'user',
+          userId: t.userId,
+          displayName: t.displayName ?? t.username ?? 'Unknown',
+          username: t.username,
+          avatarUrl: t.avatarUrl,
+        }))
+      // Text entries = attendees minus display names already covered by user chips
+      const taggedDisplayNames = new Set(
+        tags.filter((t) => !t.removedByTaggedUser).map((t) => (t.displayName ?? t.username ?? '').toLowerCase()),
+      )
+      const textEntries: AttendeeEntry[] = (initialGame.attendees ?? [])
+        .filter((n) => !taggedDisplayNames.has(n.toLowerCase()) && !activeTagIds.has(n))
+        .map((name) => ({ type: 'text', name }))
+      setAttendeeEntries([...userEntries, ...textEntries])
+    }).catch(() => {
+      // Fallback: just use text entries
+      setAttendeeEntries((initialGame.attendees ?? []).map((name) => ({ type: 'text', name })))
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Draft auto-save (add mode only)
@@ -753,9 +731,22 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       scheduleLabel = datePart ? `${levelPart} · ${datePart}` : levelPart
     }
 
-    const rawAttendees = form.whoWasThere.trim()
-      ? form.whoWasThere.split(/[,&]|\band\b/i).map((n) => n.trim()).filter((n) => n.length > 0)
-      : undefined
+    // Derive whoWasThere / attendees from chip entries
+    // attendees[] stores ALL names (text + tagged user display names) so Stats still works.
+    const allAttendeesNames = attendeeEntries.map((e) =>
+      e.type === 'text' ? e.name : e.displayName,
+    )
+    const rawAttendees = allAttendeesNames.length > 0 ? allAttendeesNames : undefined
+    const rawWhoWasThere = allAttendeesNames.join(', ') || undefined
+
+    // Rate-limit check for new tagged users
+    const newTaggedUsers = attendeeEntries.filter((e): e is Extract<AttendeeEntry, { type: 'user' }> => e.type === 'user')
+    if (newTaggedUsers.length > 0 && !checkRateLimit('tag')) {
+      setTagRateError(true)
+      setSaving(false)
+      return
+    }
+
     const validRootingFor = form.rootingFor &&
       (form.rootingFor === form.homeTeam.trim() || form.rootingFor === form.awayTeam.trim())
       ? form.rootingFor : undefined
@@ -780,7 +771,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       row: form.row.trim() || undefined,
       seatNumbers: form.seatNumbers.trim() || undefined,
       notes: form.notes.trim() || undefined,
-      whoWasThere: form.whoWasThere.trim() || undefined,
+      whoWasThere: rawWhoWasThere,
       attendees: rawAttendees,
       mvp: form.mvp.trim() || undefined,
       vibe: form.vibe.trim() || undefined,
@@ -801,10 +792,17 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
         : undefined,
     }
 
+    const taggedUserIds = newTaggedUsers.map((e) => e.userId)
+
     let navigated = false
     try {
       if (isEditMode) {
         await updateGame(game)
+        // Sync tags for edited game
+        if (user) {
+          const { tagged } = await syncGameTags(initialGame!.id, taggedUserIds)
+          if (tagged > 0) consumeRateLimit('tag')
+        }
         navigated = true
         navigate('/')
         return
@@ -813,6 +811,11 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       clearDraft()
       const gamesBefore = await getAllGames()
       const savedGame = await saveGame(game)
+      // Sync tags for newly saved game
+      if (user && taggedUserIds.length > 0) {
+        const { tagged } = await syncGameTags(savedGame.id, taggedUserIds)
+        if (tagged > 0) consumeRateLimit('tag')
+      }
       const gamesAfter = [...gamesBefore, savedGame]
       const fresh = detectNewMilestones(gamesBefore, gamesAfter)
       if (fresh.length > 0) {
@@ -1552,12 +1555,16 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
           </Field>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Who Was There">
-              <AttendeeInput
-                value={form.whoWasThere}
-                onChange={(v) => set('whoWasThere', v)}
-                existingAttendees={existingAttendees}
+              <AttendeeField
+                entries={attendeeEntries}
+                onChange={setAttendeeEntries}
+                myUserId={user?.id}
               />
-              <p className="font-caveat text-sm text-ink/40 mt-1">Separate names with commas</p>
+              {tagRateError && (
+                <p className="font-bebas text-xs tracking-[0.15em] text-red mt-1">
+                  DAILY TAG LIMIT REACHED — TRY AGAIN TOMORROW
+                </p>
+              )}
             </Field>
             <Field label="MVP">
               <input type="text" value={form.mvp} onChange={(e) => set('mvp', e.target.value)}

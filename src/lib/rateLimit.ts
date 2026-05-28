@@ -8,11 +8,12 @@
 // Client-side limits can be bypassed by clearing localStorage or using multiple
 // browsers. They deter casual abuse but are not a security guarantee.
 
-type RateLimitedAction = 'friend_request' | 'email_search'
+type RateLimitedAction = 'friend_request' | 'email_search' | 'tag'
 
 const DAILY_LIMITS: Record<RateLimitedAction, number> = {
   friend_request: 30,
   email_search: 50,
+  tag: 30,
 }
 
 function storageKey(action: RateLimitedAction): string {

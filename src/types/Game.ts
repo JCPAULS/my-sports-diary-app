@@ -70,4 +70,10 @@ export interface Game {
   isSharedWithFriends?: boolean    // default true — show in friends' feeds
   isHighlight?: boolean            // default false — user-marked highlight
   highlightPinnedUntil?: string    // ISO timestamp — when highlight pin expires
+
+  // Synthetic: not stored in DB — set when this game was fetched as a tagged-in game
+  tagInfo?: {
+    taggedByUserId: string
+    taggedByDisplayName: string | null
+  }
 }
