@@ -127,3 +127,11 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Hide scrollbar on overflow-x-auto containers (e.g. nav on mobile) */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

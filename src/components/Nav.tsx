@@ -98,41 +98,48 @@ export default function Nav() {
 
   return (
     <div className="bg-paper border-b border-ink/15">
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 flex items-center gap-0 -mb-[2px]">
-        {link('/', 'TIMELINE')}
-        {link('/stats', 'STATS')}
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 flex items-center -mb-[2px]">
+        {/* Scrollable links area — allows overflow on narrow screens */}
+        <div className="flex items-center gap-0 overflow-x-auto flex-1 scrollbar-none">
+          {link('/', 'TIMELINE')}
+          {link('/stats', 'STATS')}
 
-        {/* Feed tab */}
-        <Link
-          to="/feed"
-          className={`font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
-            feedActive
-              ? 'border-red text-ink'
-              : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
-          }`}
-        >
-          FEED
-        </Link>
+          {/* Feed tab */}
+          <Link
+            to="/feed"
+            className={`flex-shrink-0 font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
+              feedActive
+                ? 'border-red text-ink'
+                : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
+            }`}
+          >
+            FEED
+          </Link>
 
-        {/* Friends tab with pending badge */}
-        <Link
-          to="/friends"
-          className={`relative font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
-            friendsActive
-              ? 'border-red text-ink'
-              : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
-          }`}
-        >
-          FRIENDS
-          {pendingRequestCount > 0 && (
-            <span className="absolute top-1.5 right-0.5 w-4 h-4 bg-red border border-ink rounded-full flex items-center justify-center font-archivo text-[9px] text-paper font-bold leading-none">
-              {pendingRequestCount > 9 ? '9+' : pendingRequestCount}
-            </span>
-          )}
-        </Link>
+          {/* Friends tab with pending badge */}
+          <Link
+            to="/friends"
+            className={`flex-shrink-0 relative font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
+              friendsActive
+                ? 'border-red text-ink'
+                : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
+            }`}
+          >
+            FRIENDS
+            {pendingRequestCount > 0 && (
+              <span className="absolute top-1.5 right-0.5 w-4 h-4 bg-red border border-ink rounded-full flex items-center justify-center font-archivo text-[9px] text-paper font-bold leading-none">
+                {pendingRequestCount > 9 ? '9+' : pendingRequestCount}
+              </span>
+            )}
+          </Link>
 
-        {link('/settings', 'SETTINGS')}
-        <UserMenu />
+          {link('/settings', 'SETTINGS')}
+        </div>
+
+        {/* Avatar stays pinned to the right, outside the scroll area */}
+        <div className="flex-shrink-0 pl-2 pb-[2px]">
+          <UserMenu />
+        </div>
       </div>
     </div>
   )
