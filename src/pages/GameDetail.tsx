@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { deleteGame } from '@/lib/gameStore'
+import { deleteGame, updateGame } from '@/lib/gameStore'
 import { useGame } from '@/lib/useGame'
 import { getWeekLabel } from '@/lib/nflTeams'
 import Nav from '@/components/Nav'
@@ -44,8 +44,14 @@ export default function GameDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null)
+  const [isShared, setIsShared] = useState(true)
+  const [togglingShare, setTogglingShare] = useState(false)
 
   const { game, loading } = useGame(id)
+
+  useEffect(() => {
+    if (game) setIsShared(game.isSharedWithFriends ?? true)
+  }, [game])
 
   if (loading) {
     return (
@@ -90,6 +96,18 @@ export default function GameDetail() {
     navigate('/')
   }
 
+  async function handleToggleShare() {
+    if (!game || togglingShare) return
+    setTogglingShare(true)
+    const next = !isShared
+    try {
+      await updateGame({ ...game, isSharedWithFriends: next })
+      setIsShared(next)
+    } finally {
+      setTogglingShare(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <Nav />
@@ -114,19 +132,37 @@ export default function GameDetail() {
       )}
 
       <header className="bg-hero-blue border-b-4 border-ink">
-        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 flex items-center justify-between gap-3">
           <button
             onClick={() => navigate(-1)}
             className="font-bebas text-xl tracking-wider text-ink hover:text-red transition-colors"
           >
             ← Back
           </button>
-          <Link
-            to={`/game/${game.id}/edit`}
-            className="font-bebas text-xl tracking-wider text-ink hover:text-red transition-colors"
-          >
-            EDIT
-          </Link>
+
+          <div className="flex items-center gap-3 ml-auto">
+            {/* Sharing badge — tappable quick-toggle */}
+            <button
+              type="button"
+              onClick={handleToggleShare}
+              disabled={togglingShare}
+              className={`flex items-center gap-1.5 font-bebas text-xs tracking-[0.12em] border px-2.5 py-1 transition-colors ${
+                isShared
+                  ? 'border-ink/30 text-ink/50 hover:text-ink hover:border-ink/60'
+                  : 'border-ink/20 text-ink/30 hover:text-ink/50 hover:border-ink/40'
+              }`}
+            >
+              <span>{isShared ? '👁️' : '🔒'}</span>
+              {isShared ? 'SHARED' : 'PRIVATE'}
+            </button>
+
+            <Link
+              to={`/game/${game.id}/edit`}
+              className="font-bebas text-xl tracking-wider text-ink hover:text-red transition-colors"
+            >
+              EDIT
+            </Link>
+          </div>
         </div>
       </header>
 

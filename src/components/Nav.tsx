@@ -94,12 +94,25 @@ export default function Nav() {
   }
 
   const friendsActive = pathname === '/friends' || pathname.startsWith('/friends/') || pathname.startsWith('/user/')
+  const feedActive = pathname === '/feed' || pathname.startsWith('/feed/')
 
   return (
     <div className="bg-paper border-b border-ink/15">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 flex items-center gap-0 -mb-[2px]">
         {link('/', 'TIMELINE')}
         {link('/stats', 'STATS')}
+
+        {/* Feed tab */}
+        <Link
+          to="/feed"
+          className={`font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
+            feedActive
+              ? 'border-red text-ink'
+              : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
+          }`}
+        >
+          FEED
+        </Link>
 
         {/* Friends tab with pending badge */}
         <Link

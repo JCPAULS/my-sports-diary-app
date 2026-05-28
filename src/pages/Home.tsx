@@ -7,6 +7,7 @@ import { getAllMilestones } from '@/lib/milestones'
 import { getSettings } from '@/lib/settings'
 import { getTeam, hashTeamColor } from '@/lib/teams'
 import Nav from '@/components/Nav'
+import { useProfileContext } from '@/lib/ProfileContext'
 import TeamBadge from '@/components/TeamBadge'
 import PhotoImg from '@/components/PhotoImg'
 import type { Game } from '@/types/Game'
@@ -531,6 +532,7 @@ export default function Home() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const attendeeFilter = searchParams.get('attendee')
+  const { myProfile } = useProfileContext()
 
   const { games: allGames, loading } = useGames()
 
@@ -614,6 +616,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-paper">
       <Nav />
+      {myProfile?.privacyMode && (
+        <div className="bg-ink/8 border-b-2 border-ink/15 px-4 py-2 text-center">
+          <p className="font-bebas text-xs tracking-[0.2em] text-ink/50">
+            🔒 PRIVACY MODE ON — NEW GAMES DEFAULT TO PRIVATE
+          </p>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <header className="bg-hero-blue border-b-4 border-ink">

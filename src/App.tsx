@@ -16,6 +16,8 @@ import ImportGames from '@/pages/ImportGames'
 import MyProfile from '@/pages/MyProfile'
 import UserProfilePage from '@/pages/UserProfilePage'
 import Friends from '@/pages/Friends'
+import FriendsFeed from '@/pages/FriendsFeed'
+import FriendGameDetail from '@/pages/FriendGameDetail'
 import Login from '@/pages/Login'
 import SignUp from '@/pages/SignUp'
 import ResetPassword from '@/pages/ResetPassword'
@@ -54,6 +56,10 @@ export default function App() {
                 <Route path="/profile" element={<ProtectedRoute><MyProfile /></ProtectedRoute>} />
                 <Route path="/user/:userId" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
                 <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
+
+                {/* Feed */}
+                <Route path="/feed" element={<ProtectedRoute><FriendsFeed /></ProtectedRoute>} />
+                <Route path="/feed/:gameId" element={<ProtectedRoute><FriendGameDetail /></ProtectedRoute>} />
               </Routes>
             </BrowserRouter>
           </MigrationProvider>

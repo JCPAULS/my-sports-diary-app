@@ -9,11 +9,13 @@ import { NFL_WEEKS, WEEK_ORDER, getWeekLabel, NFL_FALLBACK_TEAMS } from '@/lib/n
 import { ENABLED_SPORTS, getSport, CUSTOM_LEVELS, COLLEGE_SPORT_TYPES, CUSTOM_SPORT_TYPES } from '@/lib/sports'
 import { getTeamsBySport } from '@/lib/teams'
 import Nav from '@/components/Nav'
+import Toggle from '@/components/Toggle'
 import TeamBadge from '@/components/TeamBadge'
 import PhotoImg from '@/components/PhotoImg'
 import type { Game, GameResult, Team } from '@/types/Game'
 import { detectNewMilestones, markMilestonesSeen, type Milestone } from '@/lib/milestones'
 import { getSettings } from '@/lib/settings'
+import { useProfileContext } from '@/lib/ProfileContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -238,9 +240,24 @@ async function compressImage(file: File): Promise<string> {
 export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { myProfile } = useProfileContext()
   const basicsRef = useRef<HTMLDivElement>(null)
   const [newMilestones, setNewMilestones] = useState<Milestone[]>([])
   const isEditMode = !!initialGame
+
+  // Privacy / sharing — default respects privacy_mode master toggle
+  const [isSharedWithFriends, setIsSharedWithFriends] = useState(() =>
+    initialGame ? (initialGame.isSharedWithFriends ?? true) : !(myProfile?.privacyMode ?? false),
+  )
+  const [isHighlight, setIsHighlight] = useState(() =>
+    initialGame
+      ? !!(
+          initialGame.isHighlight &&
+          initialGame.highlightPinnedUntil &&
+          new Date(initialGame.highlightPinnedUntil) > new Date()
+        )
+      : false,
+  )
 
   const defaultSport = initialGame?.sportId ?? ENABLED_SPORTS[0]?.id ?? 'nfl'
   const defaultSeason = getSport(defaultSport)?.getSeasonOptions()[0] ?? String(new Date().getFullYear())
@@ -777,6 +794,11 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       summary: appliedSummary ?? undefined,
       nickname: form.nickname.trim() || undefined,
       createdAt: initialGame?.createdAt ?? new Date().toISOString(),
+      isSharedWithFriends,
+      isHighlight,
+      highlightPinnedUntil: isHighlight
+        ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+        : undefined,
     }
 
     let navigated = false
@@ -794,6 +816,11 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       const gamesAfter = [...gamesBefore, savedGame]
       const fresh = detectNewMilestones(gamesBefore, gamesAfter)
       if (fresh.length > 0) {
+        // Auto-pin milestone games to friends' feeds for 48h
+        if (isSharedWithFriends && !isHighlight) {
+          const autoPinned = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+          updateGame({ ...savedGame, isHighlight: true, highlightPinnedUntil: autoPinned }).catch(console.warn)
+        }
         setNewMilestones(fresh)
       } else {
         navigated = true
@@ -894,6 +921,28 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
+
+        {/* ── Sharing Banner (sticky while scrolling the form) ── */}
+        <div
+          className={`sticky top-0 z-10 -mx-4 px-4 py-2.5 mb-6 flex items-center gap-3 border-b-2 transition-colors ${
+            isSharedWithFriends
+              ? 'bg-gold/10 border-gold/25 backdrop-blur-sm'
+              : 'bg-paper-deep/95 border-ink/20 backdrop-blur-sm'
+          }`}
+        >
+          <span className="text-base flex-shrink-0">{isSharedWithFriends ? '👁️' : '🔒'}</span>
+          <p className="font-bebas text-sm tracking-[0.12em] text-ink flex-1">
+            {isSharedWithFriends ? 'FRIENDS WILL SEE THIS GAME' : 'ONLY YOU WILL SEE THIS GAME'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsSharedWithFriends(!isSharedWithFriends)}
+            className="font-bebas text-xs tracking-[0.1em] text-ink/50 hover:text-ink underline flex-shrink-0 transition-colors"
+          >
+            {isSharedWithFriends ? 'Make Private' : 'Share with Friends'}
+          </button>
+        </div>
+
         {/* Ticket stub decoration */}
         <div className="hidden md:flex items-center gap-3 mb-8">
           <div className="bg-red text-white font-bebas text-xs tracking-[0.25em] px-3 py-1.5">
@@ -1263,7 +1312,7 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
           </div>
         )}
 
-        {/* ── NICKNAME ── */}
+        {/* ── NICKNAME + HIGHLIGHT ── */}
         <div className="mb-8">
           <input
             type="text"
@@ -1272,6 +1321,14 @@ export default function AddGame({ initialGame }: { initialGame?: Game } = {}) {
             placeholder="Give this game a nickname… (optional)"
             className="w-full bg-transparent border-b-2 border-ink/20 focus:border-ink/60 px-0 py-2 font-caveat text-2xl text-ink placeholder-ink/25 focus:outline-none transition-colors"
           />
+          <div className="mt-4 pt-3 border-t border-ink/8">
+            <Toggle
+              checked={isHighlight}
+              onChange={setIsHighlight}
+              label="MARK AS HIGHLIGHT"
+              description="Pins this to the top of friends' feeds for 48 hours"
+            />
+          </div>
         </div>
 
         {/* ── THE BASICS ── */}
