@@ -77,12 +77,14 @@ export default function Nav() {
   const { pathname } = useLocation()
   const { pendingRequestCount } = useProfileContext()
 
-  const link = (to: string, label: string) => {
+  const friendsActive = pathname === '/friends' || pathname.startsWith('/friends/') || pathname.startsWith('/user/')
+
+  const navItem = (to: string, label: string) => {
     const active = pathname === to || pathname.startsWith(to + '/')
     return (
       <Link
         to={to}
-        className={`font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
+        className={`flex-1 text-center font-bebas text-sm tracking-[0.2em] px-1 py-3 border-b-2 transition-colors min-w-0 ${
           active
             ? 'border-red text-ink'
             : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
@@ -93,33 +95,18 @@ export default function Nav() {
     )
   }
 
-  const friendsActive = pathname === '/friends' || pathname.startsWith('/friends/') || pathname.startsWith('/user/')
-  const feedActive = pathname === '/feed' || pathname.startsWith('/feed/')
-
   return (
     <div className="bg-paper border-b border-ink/15">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 flex items-center -mb-[2px]">
-        {/* Scrollable links area — allows overflow on narrow screens */}
-        <div className="flex items-center gap-0 overflow-x-auto flex-1 scrollbar-none">
-          {link('/', 'TIMELINE')}
-          {link('/stats', 'STATS')}
-
-          {/* Feed tab */}
-          <Link
-            to="/feed"
-            className={`flex-shrink-0 font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
-              feedActive
-                ? 'border-red text-ink'
-                : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
-            }`}
-          >
-            FEED
-          </Link>
+        {/* Nav items — evenly spaced across available width */}
+        <div className="flex items-center flex-1 min-w-0">
+          {navItem('/', 'TIMELINE')}
+          {navItem('/feed', 'FEED')}
 
           {/* Friends tab with pending badge */}
           <Link
             to="/friends"
-            className={`flex-shrink-0 relative font-bebas text-sm tracking-[0.2em] px-4 py-3 border-b-2 transition-colors ${
+            className={`flex-1 text-center relative font-bebas text-sm tracking-[0.2em] px-1 py-3 border-b-2 transition-colors min-w-0 ${
               friendsActive
                 ? 'border-red text-ink'
                 : 'border-transparent text-ink/40 hover:text-ink hover:border-ink/30'
@@ -133,10 +120,10 @@ export default function Nav() {
             )}
           </Link>
 
-          {link('/settings', 'SETTINGS')}
+          {navItem('/stats', 'STATS')}
         </div>
 
-        {/* Avatar stays pinned to the right, outside the scroll area */}
+        {/* Avatar stays pinned to the right, outside the nav items */}
         <div className="flex-shrink-0 pl-2 pb-[2px]">
           <UserMenu />
         </div>
