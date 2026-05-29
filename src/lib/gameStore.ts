@@ -23,6 +23,7 @@ export async function getAllGames(): Promise<Game[]> {
   const { data, error } = await db
     .from('games')
     .select('*')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false }) as { data: DbGame[] | null; error: unknown }
 
   if (error) throw error
