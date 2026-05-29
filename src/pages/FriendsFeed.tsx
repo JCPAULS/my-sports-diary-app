@@ -4,12 +4,16 @@ import Nav from '@/components/Nav'
 import AvatarCircle from '@/components/AvatarCircle'
 import PhotoImg from '@/components/PhotoImg'
 import TeamBadge from '@/components/TeamBadge'
+import ReactionsBar from '@/components/ReactionsBar'
+import CommentsSection from '@/components/CommentsSection'
 import {
   getFriendsFeed,
   isActiveHighlight,
   FEED_PAGE_SIZE,
   type FeedItem,
 } from '@/lib/feedStore'
+import { useAuth } from '@/lib/AuthContext'
+import { useProfileContext } from '@/lib/ProfileContext'
 import type { Game } from '@/types/Game'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,7 +45,15 @@ const MAX_HIGHLIGHTS = 3
 
 // ─── FeedCard ─────────────────────────────────────────────────────────────────
 
-function FeedCard({ item, isHighlightSection = false }: { item: FeedItem; isHighlightSection?: boolean }) {
+interface FeedCardProps {
+  item: FeedItem
+  isHighlightSection?: boolean
+  myUserId?: string
+  myDisplayName?: string | null
+  myAvatarUrl?: string | null
+}
+
+function FeedCard({ item, isHighlightSection = false, myUserId, myDisplayName, myAvatarUrl }: FeedCardProps) {
   const [expanded, setExpanded] = useState(false)
   const { game, owner, isAnniversary, anniversaryYears } = item
   const activeHighlight = isActiveHighlight(game)
@@ -99,7 +111,7 @@ function FeedCard({ item, isHighlightSection = false }: { item: FeedItem; isHigh
             </p>
             {/* Expand hint */}
             {!expanded && (
-              <p className="font-bebas text-[10px] tracking-[0.2em] text-ink/20 mt-2">
+              <p className="font-bebas text-[10px] tracking-[0.2em] text-ink/20 mt-1.5">
                 TAP TO EXPAND
               </p>
             )}
@@ -112,6 +124,11 @@ function FeedCard({ item, isHighlightSection = false }: { item: FeedItem; isHigh
           )}
         </div>
       </button>
+
+      {/* Reactions — always visible at bottom of collapsed header */}
+      <div className="px-4 pb-3 -mt-1">
+        <ReactionsBar gameId={game.id} gameOwnerId={owner.userId} compact />
+      </div>
 
       {/* Expanded content */}
       {expanded && (
@@ -212,8 +229,23 @@ function FeedCard({ item, isHighlightSection = false }: { item: FeedItem; isHigh
             </div>
           )}
 
+          {/* Reactions + Comments in expanded view */}
+          <div className="border-t border-ink/10 pt-3 flex flex-col gap-4">
+            <div>
+              <p className="font-bebas text-[10px] tracking-[0.2em] text-ink/40 mb-2">REACTIONS</p>
+              <ReactionsBar gameId={game.id} gameOwnerId={owner.userId} />
+            </div>
+            <CommentsSection
+              gameId={game.id}
+              gameOwnerId={owner.userId}
+              myUserId={myUserId}
+              myDisplayName={myDisplayName}
+              myAvatarUrl={myAvatarUrl}
+            />
+          </div>
+
           {/* Footer: collapse + view full */}
-          <div className="flex items-center justify-between pt-1 border-t border-ink/10">
+          <div className="flex items-center justify-between pt-2 border-t border-ink/10">
             <button
               type="button"
               onClick={() => setExpanded(false)}
@@ -236,7 +268,14 @@ function FeedCard({ item, isHighlightSection = false }: { item: FeedItem; isHigh
 
 // ─── Highlights strip ─────────────────────────────────────────────────────────
 
-function HighlightStrip({ items }: { items: FeedItem[] }) {
+interface HighlightStripProps {
+  items: FeedItem[]
+  myUserId?: string
+  myDisplayName?: string | null
+  myAvatarUrl?: string | null
+}
+
+function HighlightStrip({ items, myUserId, myDisplayName, myAvatarUrl }: HighlightStripProps) {
   if (items.length === 0) return null
   return (
     <section className="mb-8">
@@ -246,7 +285,14 @@ function HighlightStrip({ items }: { items: FeedItem[] }) {
       </div>
       <div className="flex flex-col gap-4">
         {items.map((item) => (
-          <FeedCard key={`hl-${item.game.id}`} item={item} isHighlightSection />
+          <FeedCard
+            key={`hl-${item.game.id}`}
+            item={item}
+            isHighlightSection
+            myUserId={myUserId}
+            myDisplayName={myDisplayName}
+            myAvatarUrl={myAvatarUrl}
+          />
         ))}
       </div>
     </section>
@@ -256,6 +302,8 @@ function HighlightStrip({ items }: { items: FeedItem[] }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FriendsFeed() {
+  const { user } = useAuth()
+  const { myProfile } = useProfileContext()
   const [items, setItems] = useState<FeedItem[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [friendCount, setFriendCount] = useState(0)
@@ -355,7 +403,12 @@ export default function FriendsFeed() {
 
         {/* Highlights section */}
         {!loading && highlightItems.length > 0 && (
-          <HighlightStrip items={highlightItems} />
+          <HighlightStrip
+            items={highlightItems}
+            myUserId={user?.id}
+            myDisplayName={myProfile?.displayName}
+            myAvatarUrl={myProfile?.profilePhotoUrl}
+          />
         )}
 
         {/* Chronological feed */}
@@ -369,7 +422,13 @@ export default function FriendsFeed() {
             )}
             <div className="flex flex-col gap-5">
               {items.map((item) => (
-                <FeedCard key={item.game.id} item={item} />
+                <FeedCard
+                  key={item.game.id}
+                  item={item}
+                  myUserId={user?.id}
+                  myDisplayName={myProfile?.displayName}
+                  myAvatarUrl={myProfile?.profilePhotoUrl}
+                />
               ))}
             </div>
           </>

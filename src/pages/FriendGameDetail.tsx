@@ -4,7 +4,12 @@ import Nav from '@/components/Nav'
 import AvatarCircle from '@/components/AvatarCircle'
 import PhotoImg from '@/components/PhotoImg'
 import TeamBadge from '@/components/TeamBadge'
+import ReactionsBar from '@/components/ReactionsBar'
+import CommentsSection from '@/components/CommentsSection'
+import IWasTherePanel from '@/components/IWasTherePanel'
 import { useToast } from '@/components/Toast'
+import { useAuth } from '@/lib/AuthContext'
+import { useProfileContext } from '@/lib/ProfileContext'
 import { getFriendGameById, isActiveHighlight, type FeedItem } from '@/lib/feedStore'
 
 function formatDate(dateStr: string): string {
@@ -18,6 +23,8 @@ export default function FriendGameDetail() {
   const { gameId } = useParams<{ gameId: string }>()
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
+  const { myProfile } = useProfileContext()
   const [item, setItem] = useState<FeedItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null)
@@ -266,6 +273,32 @@ export default function FriendGameDetail() {
                 </div>
               </div>
             )}
+
+            {/* ── Engagement section ── */}
+            <div className="pt-5 flex flex-col gap-6">
+              {/* "I Was There Too!" + Also Logged By */}
+              <IWasTherePanel
+                game={game}
+                gameOwnerId={owner.userId}
+                myUserId={user?.id}
+                canLink={!!user && user.id !== owner.userId}
+              />
+
+              {/* Reactions */}
+              <div>
+                <p className="font-bebas text-xs tracking-[0.2em] text-ink/40 mb-2">REACTIONS</p>
+                <ReactionsBar gameId={game.id} gameOwnerId={owner.userId} />
+              </div>
+
+              {/* Comments */}
+              <CommentsSection
+                gameId={game.id}
+                gameOwnerId={owner.userId}
+                myUserId={user?.id}
+                myDisplayName={myProfile?.displayName}
+                myAvatarUrl={myProfile?.profilePhotoUrl}
+              />
+            </div>
           </div>
         </div>
       </main>

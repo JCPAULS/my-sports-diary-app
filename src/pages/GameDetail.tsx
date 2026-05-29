@@ -8,6 +8,7 @@ import { getWeekLabel } from '@/lib/nflTeams'
 import Nav from '@/components/Nav'
 import TeamBadge from '@/components/TeamBadge'
 import PhotoImg from '@/components/PhotoImg'
+import IWasTherePanel from '@/components/IWasTherePanel'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -379,6 +380,18 @@ export default function GameDetail() {
               <p className="font-caveat text-lg text-ink/30 py-4">
                 No notes for this game yet.
               </p>
+            )}
+
+            {/* Also Logged By — show for any viewer of own games */}
+            {user && game && (
+              <div className="border-t-2 border-ink/10 pt-4 mt-4">
+                <IWasTherePanel
+                  game={game}
+                  gameOwnerId={user.id}
+                  myUserId={user.id}
+                  canLink={false}
+                />
+              </div>
             )}
 
             {/* Tagged-in context */}
