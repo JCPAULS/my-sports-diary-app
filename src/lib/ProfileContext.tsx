@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/AuthContext'
 import { dbProfileToProfile, type UserProfile } from '@/types/database'
+import { getUnreadCount } from '@/lib/notificationsStore'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -10,8 +11,10 @@ interface ProfileCtxValue {
   myProfile: UserProfile | null
   myProfileLoading: boolean
   pendingRequestCount: number
+  unreadNotificationCount: number
   refreshMyProfile: () => Promise<void>
   refreshRequestCount: () => Promise<void>
+  refreshUnreadCount: () => Promise<void>
 }
 
 const ProfileCtx = createContext<ProfileCtxValue | null>(null)
@@ -50,6 +53,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [myProfile, setMyProfile] = useState<UserProfile | null>(null)
   const [myProfileLoading, setMyProfileLoading] = useState(true)
   const [pendingRequestCount, setPendingRequestCount] = useState(0)
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refreshMyProfile = useCallback(async () => {
     if (!user) {
@@ -80,20 +85,38 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     setPendingRequestCount(count ?? 0)
   }, [user])
 
+  const refreshUnreadCount = useCallback(async () => {
+    if (!user) { setUnreadNotificationCount(0); return }
+    const n = await getUnreadCount().catch(() => 0)
+    setUnreadNotificationCount(n)
+  }, [user])
+
   useEffect(() => {
     if (!user) {
       setMyProfile(null)
       setMyProfileLoading(false)
       setPendingRequestCount(0)
+      setUnreadNotificationCount(0)
+      if (pollRef.current) clearInterval(pollRef.current)
       return
     }
     ensureProfileExists(user.id, user.email ?? '', user.user_metadata ?? {})
-      .then(() => Promise.all([refreshMyProfile(), refreshRequestCount()]))
+      .then(() => Promise.all([refreshMyProfile(), refreshRequestCount(), refreshUnreadCount()]))
       .catch(console.error)
+
+    // Poll unread count every 60s to catch notifications from other users
+    pollRef.current = setInterval(() => {
+      refreshUnreadCount().catch(() => {})
+    }, 60_000)
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <ProfileCtx.Provider value={{ myProfile, myProfileLoading, pendingRequestCount, refreshMyProfile, refreshRequestCount }}>
+    <ProfileCtx.Provider value={{
+      myProfile, myProfileLoading, pendingRequestCount, unreadNotificationCount,
+      refreshMyProfile, refreshRequestCount, refreshUnreadCount,
+    }}>
       {children}
     </ProfileCtx.Provider>
   )

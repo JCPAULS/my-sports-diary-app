@@ -1,12 +1,29 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Nav from '@/components/Nav'
+import Toggle from '@/components/Toggle'
 import { ENABLED_SPORTS } from '@/lib/sports'
 import { getTeamsBySport, getTeam } from '@/lib/teams'
 import { getSettings, applyTheme, type AppSettings } from '@/lib/settings'
 import * as settingsStore from '@/lib/settingsStore'
 import { getAllGames } from '@/lib/storage'
 import { useMigration } from '@/lib/MigrationContext'
+import {
+  getNotifPrefs,
+  saveNotifPrefs,
+  ALL_NOTIF_TYPES,
+  NOTIF_TYPE_LABELS,
+  type NotificationPrefs,
+} from '@/lib/notificationPrefs'
+import {
+  isPushSupported,
+  isIosDevice,
+  isInStandaloneMode,
+  getCurrentPermission,
+  subscribeToPush,
+  unsubscribeFromPush,
+  isCurrentlySubscribed,
+} from '@/lib/pushStore'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -28,6 +45,60 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const hasLocalGames = getAllGames().length > 0
+
+  // ─── Notification state ───────────────────────────────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>(getNotifPrefs)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default')
+  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [subscribeStatus, setSubscribeStatus] = useState<string | null>(null)
+  const [checkingPush, setCheckingPush] = useState(true)
+  const pushSupported = isPushSupported()
+  const isIos = isIosDevice()
+  const isStandalone = isInStandaloneMode()
+  const vapidConfigured = !!import.meta.env.VITE_VAPID_PUBLIC_KEY
+
+  useEffect(() => {
+    setPushPermission(getCurrentPermission())
+    isCurrentlySubscribed().then((v) => {
+      setIsSubscribed(v)
+      setCheckingPush(false)
+    }).catch(() => setCheckingPush(false))
+  }, [])
+
+  function updateNotifPrefs(updates: Partial<NotificationPrefs>) {
+    setNotifPrefs((prev) => {
+      const next = { ...prev, ...updates }
+      saveNotifPrefs(next)
+      return next
+    })
+  }
+
+  function togglePushType(type: typeof ALL_NOTIF_TYPES[number]) {
+    const next = { ...notifPrefs.push, [type]: !notifPrefs.push[type] }
+    updateNotifPrefs({ push: next })
+  }
+
+  async function handleEnablePush() {
+    setSubscribeStatus(null)
+    const result = await subscribeToPush()
+    setPushPermission(getCurrentPermission())
+    if (result === 'subscribed' || result === 'already_subscribed') {
+      setIsSubscribed(true)
+      setSubscribeStatus('push_enabled')
+    } else if (result === 'permission_denied') {
+      setSubscribeStatus('permission_denied')
+    } else if (result === 'no_vapid_key') {
+      setSubscribeStatus('no_vapid_key')
+    } else {
+      setSubscribeStatus('error')
+    }
+  }
+
+  async function handleDisablePush() {
+    await unsubscribeFromPush()
+    setIsSubscribed(false)
+    setSubscribeStatus(null)
+  }
 
   // Load latest settings from Supabase on mount
   useEffect(() => {
@@ -271,6 +342,107 @@ export default function Settings() {
             </button>
           </div>
         )}
+
+        {/* ── NOTIFICATIONS ── */}
+        <div>
+          <SectionHeader title="NOTIFICATIONS" />
+
+          {/* Master pause toggle */}
+          <div className="mb-6 p-4 border-2 border-ink/20 bg-paper-deep">
+            <Toggle
+              checked={notifPrefs.pauseAll}
+              onChange={(v) => updateNotifPrefs({ pauseAll: v })}
+              label="Pause all notifications"
+              description="Notifications are still recorded but won't send push alerts."
+            />
+          </div>
+
+          {/* Push notifications setup */}
+          <div className="mb-6">
+            <p className="font-bebas text-sm tracking-[0.15em] text-ink mb-3">PUSH NOTIFICATIONS</p>
+
+            {!pushSupported && (
+              <div className="p-3 border border-ink/20 bg-paper-deep">
+                <p className="font-archivo text-sm text-ink/50">
+                  Push notifications are not supported in this browser.
+                </p>
+              </div>
+            )}
+
+            {pushSupported && isIos && !isStandalone && (
+              <div className="p-3 border border-gold/50 bg-gold/5 mb-3">
+                <p className="font-bebas text-xs tracking-[0.1em] text-ink/70 mb-1">IPHONE NOTE</p>
+                <p className="font-archivo text-sm text-ink/60 leading-snug">
+                  Push notifications on iPhone require the app to be added to your Home Screen first.
+                  Tap the Share button → "Add to Home Screen", then reopen from there.
+                </p>
+              </div>
+            )}
+
+            {pushSupported && !vapidConfigured && (
+              <div className="p-3 border border-ink/20 bg-paper-deep">
+                <p className="font-archivo text-sm text-ink/50">
+                  Push notifications are not configured for this deployment.
+                </p>
+              </div>
+            )}
+
+            {pushSupported && vapidConfigured && !checkingPush && (
+              <div className="flex items-center gap-3">
+                {isSubscribed ? (
+                  <>
+                    <span className="font-archivo text-sm text-ink/60">Push enabled on this device</span>
+                    <button
+                      type="button"
+                      onClick={handleDisablePush}
+                      className="font-bebas text-xs tracking-[0.1em] text-ink/40 hover:text-red underline transition-colors"
+                    >
+                      DISABLE
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleEnablePush}
+                    disabled={pushPermission === 'denied'}
+                    className="font-bebas text-sm tracking-[0.15em] bg-ink text-paper px-5 py-2.5 hover:bg-red transition-colors disabled:opacity-40"
+                  >
+                    ENABLE PUSH NOTIFICATIONS
+                  </button>
+                )}
+              </div>
+            )}
+
+            {subscribeStatus === 'permission_denied' && (
+              <p className="font-archivo text-xs text-red mt-2">
+                Notifications are blocked. Enable them in your browser settings and try again.
+              </p>
+            )}
+            {subscribeStatus === 'push_enabled' && (
+              <p className="font-archivo text-xs text-ink/50 mt-2">Push notifications enabled!</p>
+            )}
+            {subscribeStatus === 'error' && (
+              <p className="font-archivo text-xs text-red mt-2">
+                Something went wrong. Try again or reload the page.
+              </p>
+            )}
+          </div>
+
+          {/* Per-type push toggles */}
+          {pushSupported && vapidConfigured && (
+            <div className="flex flex-col gap-4">
+              <p className="font-bebas text-xs tracking-[0.15em] text-ink/40">PUSH ALERTS FOR</p>
+              {ALL_NOTIF_TYPES.map((type) => (
+                <Toggle
+                  key={type}
+                  checked={notifPrefs.push[type]}
+                  onChange={() => togglePushType(type)}
+                  label={NOTIF_TYPE_LABELS[type]}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── SAVE ── */}
         <div className="flex items-center gap-4 pt-2 border-t-2 border-ink/10">

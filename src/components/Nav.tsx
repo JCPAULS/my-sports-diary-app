@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/AuthContext'
 import { useProfileContext } from '@/lib/ProfileContext'
+import NotificationsInbox from '@/components/NotificationsInbox'
 
 function UserMenu() {
   const { user, signOut } = useAuth()
@@ -29,7 +30,7 @@ function UserMenu() {
   }
 
   return (
-    <div ref={ref} className="relative ml-auto flex items-center">
+    <div ref={ref} className="relative flex items-center">
       <button
         onClick={() => setOpen((v) => !v)}
         className="w-8 h-8 rounded-full bg-red border-2 border-ink flex items-center justify-center font-bebas text-sm text-paper leading-none hover:bg-red-deep transition-colors"
@@ -75,7 +76,9 @@ function UserMenu() {
 
 export default function Nav() {
   const { pathname } = useLocation()
-  const { pendingRequestCount } = useProfileContext()
+  const { user } = useAuth()
+  const { pendingRequestCount, unreadNotificationCount, refreshUnreadCount } = useProfileContext()
+  const [inboxOpen, setInboxOpen] = useState(false)
 
   const friendsActive = pathname === '/friends' || pathname.startsWith('/friends/') || pathname.startsWith('/user/')
 
@@ -96,7 +99,7 @@ export default function Nav() {
   }
 
   return (
-    <div className="bg-paper border-b border-ink/15">
+    <div className="bg-paper border-b border-ink/15 relative">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 flex items-center -mb-[2px]">
         {/* Nav items — evenly spaced across available width */}
         <div className="flex items-center flex-1 min-w-0">
@@ -123,8 +126,36 @@ export default function Nav() {
           {navItem('/stats', 'STATS')}
         </div>
 
-        {/* Avatar stays pinned to the right, outside the nav items */}
-        <div className="flex-shrink-0 pl-2 pb-[2px]">
+        {/* Bell + avatar pinned to the right */}
+        <div className="flex-shrink-0 pl-2 pb-[2px] flex items-center gap-2">
+          {user && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setInboxOpen((v) => !v)}
+                aria-label="Notifications"
+                className="relative w-8 h-8 flex items-center justify-center text-ink/50 hover:text-ink transition-colors"
+              >
+                {/* Bell icon (SVG) */}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute top-0 right-0 min-w-[14px] h-[14px] bg-red border border-ink rounded-full flex items-center justify-center font-archivo text-[8px] text-paper font-bold leading-none px-[2px]">
+                    {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+
+              {inboxOpen && (
+                <NotificationsInbox
+                  onClose={() => setInboxOpen(false)}
+                  onCountRefresh={() => refreshUnreadCount().catch(() => {})}
+                />
+              )}
+            </div>
+          )}
           <UserMenu />
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useGames } from '@/lib/useGames'
 import { useTaggedGames } from '@/lib/useTaggedGames'
@@ -7,6 +7,8 @@ import { getSport, ENABLED_SPORTS } from '@/lib/sports'
 import { getAllMilestones } from '@/lib/milestones'
 import { getSettings } from '@/lib/settings'
 import { getTeam, hashTeamColor } from '@/lib/teams'
+import { computeAnniversary } from '@/lib/feedStore'
+import { maybeFireAnniversaryNotifications } from '@/lib/notificationsStore'
 import Nav from '@/components/Nav'
 import { useProfileContext } from '@/lib/ProfileContext'
 import TeamBadge from '@/components/TeamBadge'
@@ -593,6 +595,20 @@ export default function Home() {
     ...ownedGames,
     ...taggedGames.filter((g) => !ownedIds.has(g.id)),
   ]
+
+  // Fire anniversary notifications once per day for own games with anniversary dates
+  useEffect(() => {
+    if (ownedLoading || ownedGames.length === 0) return
+    const anniversaryGames = ownedGames
+      .filter((g) => g.date)
+      .flatMap((g) => {
+        const { isAnniversary, years } = computeAnniversary(g)
+        return isAnniversary ? [{ gameId: g.id, years }] : []
+      })
+    if (anniversaryGames.length > 0) {
+      maybeFireAnniversaryNotifications(anniversaryGames).catch(() => {})
+    }
+  }, [ownedLoading, ownedGames.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter panel state — team and sport can be pre-set from URL params
   const [filtersOpen, setFiltersOpen] = useState(() => !!(searchParams.get('team') || searchParams.get('sport')))
