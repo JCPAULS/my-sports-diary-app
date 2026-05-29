@@ -4,6 +4,8 @@ import Nav from '@/components/Nav'
 import AvatarCircle from '@/components/AvatarCircle'
 import TeamBadge from '@/components/TeamBadge'
 import ConfirmModal from '@/components/ConfirmModal'
+import PhotoImg from '@/components/PhotoImg'
+import ReportModal from '@/components/ReportModal'
 import { useToast } from '@/components/Toast'
 import { useAuth } from '@/lib/AuthContext'
 import { useProfileContext } from '@/lib/ProfileContext'
@@ -37,7 +39,7 @@ function FriendGameCard({ game }: { game: Game }) {
   return (
     <div className="border-2 border-ink/15 bg-paper p-3 flex gap-3">
       {game.photos?.[0] && (
-        <img
+        <PhotoImg
           src={game.photos[0]}
           alt="game photo"
           className="w-14 h-14 object-cover border border-ink/10 flex-shrink-0"
@@ -96,6 +98,7 @@ export default function UserProfilePage() {
   // Confirm modals
   const [confirmUnfriend, setConfirmUnfriend] = useState(false)
   const [confirmBlock, setConfirmBlock] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
 
   // Close menu on outside click
   useEffect(() => {
@@ -398,6 +401,14 @@ export default function UserProfilePage() {
     <div className="min-h-screen bg-paper">
       <Nav />
 
+      {showReportModal && userId && (
+        <ReportModal
+          contentType="user"
+          contentId={userId}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
+
       <ConfirmModal
         open={confirmUnfriend}
         title="UNFRIEND?"
@@ -457,6 +468,9 @@ export default function UserProfilePage() {
                       </button>
                       <button onClick={() => { setMenuOpen(false); setConfirmBlock(true) }} className="w-full text-left px-3 py-2.5 font-archivo text-sm text-red hover:bg-ink/5">
                         Block
+                      </button>
+                      <button onClick={() => { setMenuOpen(false); setShowReportModal(true) }} className="w-full text-left px-3 py-2.5 font-archivo text-sm text-ink/50 hover:bg-ink/5 border-t border-ink/10">
+                        Report
                       </button>
                     </div>
                   )}

@@ -9,6 +9,8 @@ import {
   removeComment,
   type CommentWithProfile,
 } from '@/lib/engagementStore'
+import { checkRateLimit, consumeRateLimit } from '@/lib/rateLimit'
+import { commentPassesContentCheck } from '@/lib/contentFilter'
 import { avatarInitials } from '@/lib/profileUtils'
 
 const INITIAL_SHOW = 3
@@ -72,10 +74,13 @@ export default function CommentsSection({ gameId, gameOwnerId, myUserId, myDispl
     const content = input.trim()
     if (!content || submitting || !myUserId) return
     if (content.length > 500) { setError('Comment must be 500 characters or fewer.'); return }
+    if (!commentPassesContentCheck(content)) { setError('Comment contains disallowed content.'); return }
+    if (!checkRateLimit('comment')) { setError('You\'ve posted too many comments today. Try again tomorrow.'); return }
     setError(null)
     setSubmitting(true)
     setInput('')
     try {
+      consumeRateLimit('comment')
       const newComment = await submitComment(gameId, content, gameOwnerId)
       setComments((prev) => [...prev, newComment])
       setExpanded(true)

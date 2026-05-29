@@ -7,6 +7,7 @@ import TeamBadge from '@/components/TeamBadge'
 import ReactionsBar from '@/components/ReactionsBar'
 import CommentsSection from '@/components/CommentsSection'
 import IWasTherePanel from '@/components/IWasTherePanel'
+import ReportModal from '@/components/ReportModal'
 import { useToast } from '@/components/Toast'
 import { useAuth } from '@/lib/AuthContext'
 import { useProfileContext } from '@/lib/ProfileContext'
@@ -28,6 +29,7 @@ export default function FriendGameDetail() {
   const [item, setItem] = useState<FeedItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
 
   useEffect(() => {
     if (!gameId) { navigate('/feed'); return }
@@ -60,8 +62,20 @@ export default function FriendGameDetail() {
 
   if (!item) return null
 
+  const isMyGame = user?.id === item.owner.userId
+
   const { game, owner, isAnniversary, anniversaryYears } = item
   const activeHighlight = isActiveHighlight(game)
+
+  if (showReportModal) {
+    return (
+      <ReportModal
+        contentType="game"
+        contentId={game.id}
+        onClose={() => setShowReportModal(false)}
+      />
+    )
+  }
   const hasScore = game.homeScore !== undefined && game.awayScore !== undefined
   const hasLittleThings = !!(game.whatYouWore || game.whatYouAte || game.whoDrove || game.pregameRitual || game.outfitPhoto)
 
@@ -298,6 +312,19 @@ export default function FriendGameDetail() {
                 myDisplayName={myProfile?.displayName}
                 myAvatarUrl={myProfile?.profilePhotoUrl}
               />
+
+              {/* Report link (only for other users' games) */}
+              {!isMyGame && user && (
+                <div className="pt-2 border-t border-ink/10">
+                  <button
+                    type="button"
+                    onClick={() => setShowReportModal(true)}
+                    className="font-bebas text-[10px] tracking-[0.1em] text-ink/25 hover:text-ink/50 transition-colors"
+                  >
+                    Report this game
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

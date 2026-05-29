@@ -324,7 +324,14 @@ export async function blockUser(userId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('[friendsStore] blockUser: not authenticated')
 
-  // TODO (F6): also remove any existing friendship and pending requests
+  // Cancel any pending friend requests in both directions before blocking
+  await db
+    .from('friend_requests')
+    .update({ status: 'cancelled', responded_at: new Date().toISOString() })
+    .in('status', ['pending'])
+    .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${userId}),and(from_user_id.eq.${userId},to_user_id.eq.${user.id})`)
+    .catch(() => {}) // non-fatal if no pending requests exist
+
   const { error } = await db
     .from('blocked_users')
     .insert({ blocker_user_id: user.id, blocked_user_id: userId })

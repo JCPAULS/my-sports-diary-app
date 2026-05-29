@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Nav from '@/components/Nav'
 import Toggle from '@/components/Toggle'
@@ -8,6 +8,8 @@ import { getSettings, applyTheme, type AppSettings } from '@/lib/settings'
 import * as settingsStore from '@/lib/settingsStore'
 import { getAllGames } from '@/lib/storage'
 import { useMigration } from '@/lib/MigrationContext'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/lib/AuthContext'
 import {
   getNotifPrefs,
   saveNotifPrefs,
@@ -98,6 +100,51 @@ export default function Settings() {
     await unsubscribeFromPush()
     setIsSubscribed(false)
     setSubscribeStatus(null)
+  }
+
+  // ─── Account deletion ─────────────────────────────────────────────────────
+  const { signOut } = useAuth()
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const deleteInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== 'DELETE') return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      // 1. Delete game photos from storage (best-effort)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: folders } = await supabase.storage.from('game-photos').list(user.id)
+        if (folders?.length) {
+          for (const folder of folders) {
+            const { data: files } = await supabase.storage.from('game-photos').list(`${user.id}/${folder.name}`)
+            if (files?.length) {
+              const paths = files.map((f) => `${user.id}/${folder.name}/${f.name}`)
+              await supabase.storage.from('game-photos').remove(paths).catch(() => {})
+            }
+          }
+        }
+      }
+
+      // 2. Call the SECURITY DEFINER RPC — deletes auth.users, cascades everything
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).rpc('delete_my_account')
+      if (error) throw new Error(error.message)
+
+      // 3. Sign out and redirect
+      await signOut()
+      navigate('/login')
+    } catch (err) {
+      setDeleteError(
+        (err as Error).message?.includes('not_authenticated')
+          ? 'Session expired — please sign in again.'
+          : 'Deletion failed. Contact support or try again.',
+      )
+      setDeleting(false)
+    }
   }
 
   // Load latest settings from Supabase on mount
@@ -442,6 +489,46 @@ export default function Settings() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* ── DANGER ZONE ── */}
+        <div>
+          <div className="flex items-center gap-3 mb-5">
+            <h2 className="font-bebas text-xl tracking-[0.2em] text-red flex-shrink-0">DANGER ZONE</h2>
+            <div className="flex-1 h-[2px] bg-red/30" />
+          </div>
+          <div className="border-2 border-red/30 bg-paper-deep p-5">
+            <p className="font-bebas text-sm tracking-[0.15em] text-ink mb-1">DELETE ACCOUNT</p>
+            <p className="font-archivo text-sm text-ink/50 mb-4 leading-snug">
+              This permanently deletes your account, all your games, photos, and data.
+              Friends will not be notified. This cannot be undone.
+            </p>
+            <p className="font-bebas text-xs tracking-[0.15em] text-ink/60 mb-2">
+              TYPE <span className="text-red">DELETE</span> TO CONFIRM
+            </p>
+            <div className="flex items-center gap-3">
+              <input
+                ref={deleteInputRef}
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="DELETE"
+                disabled={deleting}
+                className="flex-1 max-w-[160px] bg-white border-2 border-ink/30 px-3 py-2 font-bebas text-sm tracking-[0.15em] text-ink focus:outline-none focus:border-red transition-colors disabled:opacity-40"
+              />
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'DELETE' || deleting}
+                className="font-bebas text-sm tracking-[0.1em] bg-red text-white border-2 border-ink px-5 py-2 disabled:opacity-30 transition-opacity"
+              >
+                {deleting ? 'DELETING…' : 'DELETE MY ACCOUNT'}
+              </button>
+            </div>
+            {deleteError && (
+              <p className="font-archivo text-xs text-red mt-2">{deleteError}</p>
+            )}
+          </div>
         </div>
 
         {/* ── SAVE ── */}
